@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.jpg" width="180" style="border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+  <img src="assets/banner.png" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
   <h1 align="center">NeuroGet 🚀</h1>
   <p align="center">
     <strong>The Next-Generation AI-Powered Download Manager</strong>
