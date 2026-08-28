@@ -24,6 +24,8 @@ By bridging the gap between traditional multi-threaded downloading and modern Ar
 
 <p align="center">
   <img src="assets/banner.png" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+  <br><br>
+  <img src="assets/banner_light.png" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
 </p>
 
 ---
