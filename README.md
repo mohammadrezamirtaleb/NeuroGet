@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+  <img src="assets/logo.jpg" width="180" style="border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
   <h1 align="center">NeuroGet 🚀</h1>
   <p align="center">
     <strong>The Next-Generation AI-Powered Download Manager</strong>
@@ -21,6 +21,10 @@
 **NeuroGet** is not just another download manager. It is a state-of-the-art, AI-driven fetching engine wrapped in a breathtaking **Windows 11 Fluent Design** interface. 
 
 By bridging the gap between traditional multi-threaded downloading and modern Artificial Intelligence, NeuroGet takes the manual work out of organizing your files, guessing extraction passwords, and managing tasks.
+
+<p align="center">
+  <img src="assets/banner.png" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+</p>
 
 ---
 
