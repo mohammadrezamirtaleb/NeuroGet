@@ -61,14 +61,15 @@ Engineered with a robust **Layered MVC Architecture**. All heavy lifting—from 
 NeuroGet strictly adheres to **Enterprise Software Standards**:
 
 ```text
-ODM/
-├── main.py                    # Application Entry Point & Splash Screen
-├── assets/                    # Brand Assets & Logos
-├── app/
-│   ├── models/                # SQLAlchemy ORM, Schemas & SQLite DB connection
-│   ├── services/              # Isolated business logic (AI Scanner, Password Finder)
-│   ├── controllers/           # Core Download Engine & Async HTTP Managers
-│   └── views/                 # PyQt5 Fluent GUI (Pages, Components)
+📂 NeuroGet/
+├── 📄 main.py                 # Application Entry Point & Splash Screen
+├── 📄 setup_wizard.py         # Standalone GUI Installer Builder
+├── 📁 assets/                 # Brand Assets, Logos, and Icons
+└── 📂 app/
+    ├── 📁 models/             # SQLAlchemy ORM, Schemas & SQLite DB
+    ├── 📁 services/           # Business logic (AI Scanner, Password Finder)
+    ├── 📁 controllers/        # Core Download Engine & Async HTTP Managers
+    └── 📁 views/              # PyQt5 Fluent GUI (Pages, Components)
 ```
 
 ---
