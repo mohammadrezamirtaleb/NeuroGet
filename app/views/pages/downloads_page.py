@@ -89,7 +89,8 @@ class DownloadsPage(QWidget):
         w.cancelButton.setText('Cancel')
 
         if w.exec():
-            self.add_download()
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(250, self.add_download)
 
     def add_download(self):
         url = self.url_input.text().strip()

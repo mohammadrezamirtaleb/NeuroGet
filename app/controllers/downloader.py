@@ -1,8 +1,11 @@
 import os
 import time
 import requests
+import urllib3
 import urllib.parse
 from PyQt5.QtCore import QThread, pyqtSignal
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class DownloadWorker(QThread):
     metadata_ready = pyqtSignal(str, int)  # filename, total_size (bytes)
@@ -30,7 +33,12 @@ class DownloadWorker(QThread):
             if self.downloaded_size > 0:
                 headers['Range'] = f"bytes={self.downloaded_size}-"
                 
-            response = requests.get(self.url, headers=headers, stream=True, timeout=15)
+            try:
+                response = requests.get(self.url, headers=headers, stream=True, timeout=15)
+            except requests.exceptions.SSLError:
+                # Fallback for VPNs or proxies that intercept SSL certificates
+                response = requests.get(self.url, headers=headers, stream=True, timeout=15, verify=False)
+                
             response.raise_for_status()
 
             # Determine Total Size

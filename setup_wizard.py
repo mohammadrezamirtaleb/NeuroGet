@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (SubtitleLabel, ProgressBar, PrimaryPushButton, 
-                            BodyLabel, InfoBar, setTheme, Theme, ImageLabel)
+                            BodyLabel, InfoBar, setTheme, Theme, ImageLabel, LineEdit)
 
 class InstallWorker(QThread):
     progress = pyqtSignal(int, str)
@@ -22,6 +22,9 @@ class InstallWorker(QThread):
                 self.finished.emit(False)
                 return
 
+            # Kill any running instances before modifying files
+            os.system('taskkill /F /IM NeuroGet.exe >nul 2>&1')
+            
             install_dir = os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet")
             if os.path.exists(install_dir):
                 shutil.rmtree(install_dir, ignore_errors=True)
@@ -62,6 +65,24 @@ oLink.Save
             os.system(f'cscript //Nologo "{vbs_path}"')
             if os.path.exists(vbs_path):
                 os.remove(vbs_path)
+                
+            self.progress.emit(95, "Registering uninstaller...")
+            try:
+                import winreg
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\NeuroGet"
+                key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "NeuroGet AI Download Manager")
+                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.0")
+                winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "NeuroGet")
+                winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, target_path)
+                
+                uninstall_cmd = f'powershell.exe -WindowStyle Hidden -Command "Remove-Item -Recurse -Force \'{install_dir}\' -ErrorAction SilentlyContinue; Remove-Item -Force \'$env:USERPROFILE\\Desktop\\NeuroGet.lnk\' -ErrorAction SilentlyContinue; Remove-Item -Path \'HKCU:\\{key_path}\' -Force -ErrorAction SilentlyContinue"'
+                winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, uninstall_cmd)
+                winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+                winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
+                winreg.CloseKey(key)
+            except Exception:
+                pass
             
             self.progress.emit(100, "Installation Complete!")
             self.finished.emit(True)
@@ -105,6 +126,18 @@ class SetupWizard(QWidget):
         self.title.setAlignment(Qt.AlignCenter)
         self.vbox.addWidget(self.title)
         
+        # Show Installation Path
+        self.path_layout = QVBoxLayout()
+        self.path_layout.setSpacing(5)
+        self.path_label = BodyLabel("Installation Path:", self)
+        self.path_layout.addWidget(self.path_label)
+        
+        self.path_input = LineEdit(self)
+        self.path_input.setText(os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet"))
+        self.path_input.setReadOnly(True)
+        self.path_layout.addWidget(self.path_input)
+        self.vbox.addLayout(self.path_layout)
+        
         self.status = BodyLabel("Ready to install NeuroGet AI Download Manager.", self)
         self.status.setAlignment(Qt.AlignCenter)
         self.vbox.addWidget(self.status)
@@ -134,7 +167,7 @@ class SetupWizard(QWidget):
             self.worker.start()
         elif self.btn.text() == "Launch NeuroGet":
             install_dir = os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet")
-            target_path = os.path.join(install_dir, 'NeuroGet', 'NeuroGet.exe')
+            target_path = os.path.join(install_dir, 'NeuroGet.exe')
             os.startfile(target_path)
             QApplication.quit()
 

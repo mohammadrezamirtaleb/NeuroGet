@@ -1,7 +1,7 @@
 import os
 import urllib.parse
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame, QApplication
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QTimer
 from qfluentwidgets import (ProgressBar, StrongBodyLabel, BodyLabel, 
                             CaptionLabel, ToolButton, CardWidget, IconWidget,
                             PushButton, MessageBox, LineEdit, InfoBar)
@@ -170,7 +170,7 @@ class DownloadCard(CardWidget):
         InfoBar.error("Download Failed", f"Failed to download {self.filename}: {err_msg}", parent=self.window())
 
     def show_smart_passwords(self):
-        passwords = PasswordFinder.get_probable_passwords(self.url)
+        passwords = PasswordFinder.get_probable_passwords(self.url, self.filename)
         if not passwords:
             passwords = ["Could not determine password from URL."]
             
@@ -180,7 +180,7 @@ class DownloadCard(CardWidget):
             line_edit = LineEdit(w.widget)
             line_edit.setText(pwd)
             line_edit.setReadOnly(True)
-            w.viewLayout.addWidget(line_edit)
+            w.textLayout.addWidget(line_edit)
             
         w.yesButton.setText('Copy First & Close')
         w.cancelButton.setText('Close')

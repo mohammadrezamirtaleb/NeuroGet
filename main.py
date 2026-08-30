@@ -17,12 +17,17 @@ from app.views.pages.smart_rules_page import SmartRulesPage
 from app.views.pages.settings_page import SettingsPage
 from app.views.splash_screen import NeuroSplashScreen
 
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
 class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
         
         self.setWindowTitle('NeuroGet')
-        self.setWindowIcon(QIcon('assets/logo_transparent.png'))
+        self.setWindowIcon(QIcon(resource_path('assets/logo_transparent.png')))
 
         self.initWindow()
 
@@ -80,7 +85,7 @@ if __name__ == '__main__':
     setTheme(Theme.DARK)
     
     # Show Custom Splash Screen First
-    splash = NeuroSplashScreen('assets/logo.jpg')
+    splash = NeuroSplashScreen(resource_path('assets/logo.jpg'))
     
     # Main Window (hidden initially)
     w = MainWindow()

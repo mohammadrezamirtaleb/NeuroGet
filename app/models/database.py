@@ -1,7 +1,16 @@
+import os
+import sys
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "sqlite:///downloads.db"
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+db_path = os.path.join(base_dir, 'downloads.db')
+db_path_clean = db_path.replace('\\', '/')
+DATABASE_URL = f"sqlite:///{db_path_clean}"
 
 engine = create_engine(DATABASE_URL, echo=False, connect_args={'timeout': 15})
 SessionLocal = sessionmaker(bind=engine)

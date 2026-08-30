@@ -1,44 +1,79 @@
+import re
 from urllib.parse import urlparse
 
 class PasswordFinder:
+    # A mapping of common CDNs or download servers to their actual website passwords
+    CDN_MAP = {
+        'pgupgame.com': ['www.par30games.net', 'par30games.net'],
+        'soft98.ir': ['soft98.ir'],
+        'yasdl.com': ['www.yasdl.com', 'yasdl.com'],
+        'downloadha.com': ['www.downloadha.com', 'downloadha.com'],
+        'p30download': ['www.p30download.com', 'www.p30download.ir'],
+        'sarzamindownload': ['www.sarzamindownload.com'],
+        'p30day': ['www.p30day.com', 'p30day.com'],
+        'vgdl.ir': ['vgdl.ir', 'www.vgdl.ir'],
+        'download.ir': ['www.download.ir', 'download.ir'],
+        'farsroid.com': ['www.farsroid.com', 'farsroid.com']
+    }
+
     @staticmethod
-    def get_probable_passwords(url):
-        """
-        Intelligently guesses extraction passwords based on the download URL.
-        Many download sites (especially in certain regions) use their domain name as the archive password.
-        """
-        parsed = urlparse(url)
-        host = parsed.netloc
-        if not host:
-            return []
-            
-        # Remove ports if any
-        host = host.split(':')[0]
-        
+    def get_probable_passwords(url, filename=""):
         passwords = []
         
-        # If it's a subdomain (e.g. dl2.soft98.ir), the password is usually the root domain
-        parts = host.split('.')
-        
-        # Heuristic 1: The exact host
-        passwords.append(host)
-        
-        # Heuristic 2 & 3: Root domain and www. root domain
-        if len(parts) >= 2:
-            root_domain = ".".join(parts[-2:])
-            if root_domain not in passwords:
-                passwords.append(root_domain)
+        # 1. Heuristic: Extract domain patterns from the filename
+        # Many sites name their files like [www.site.com]_file.zip or site.ir_file.rar
+        if filename:
+            # Look for domain-like strings in the filename
+            domain_regex = r'(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}'
+            matches = re.findall(domain_regex, filename, re.IGNORECASE)
             
-            www_domain = f"www.{root_domain}"
-            if www_domain not in passwords:
-                passwords.append(www_domain)
+            # Common file extensions that might be caught as domains by mistake
+            ignore_exts = {'zip', 'rar', '7z', 'tar', 'gz', 'exe', 'msi', 'apk', 'mp4', 'mkv', 'mp3', 'iso', 'part1', 'part2', 'part3', 'part4', 'part5', 'bin', '001', '002'}
+            
+            for match in matches:
+                match_lower = match.lower()
+                ext = match_lower.split('.')[-1]
+                if ext not in ignore_exts:
+                    passwords.append(match_lower)
+                    if not match_lower.startswith('www.'):
+                        passwords.append(f"www.{match_lower}")
+
+        # Parse URL
+        parsed = urlparse(url)
+        host = parsed.netloc
+        if host:
+            host = host.split(':')[0].lower()
+            
+            # 2. Heuristic: Check CDN mapping
+            for cdn, source_passwords in PasswordFinder.CDN_MAP.items():
+                if cdn in host:
+                    passwords.extend(source_passwords)
+            
+            # 3. Heuristic: The exact host and root domain
+            parts = host.split('.')
+            if host not in passwords:
+                passwords.append(host)
                 
-        # Heuristic 4: Removing 'www.' if the host started with it
-        if host.startswith('www.'):
-            stripped = host[4:]
-            if stripped not in passwords:
-                passwords.append(stripped)
+            if len(parts) >= 2:
+                root_domain = ".".join(parts[-2:])
+                if root_domain not in passwords:
+                    passwords.append(root_domain)
                 
-        # Return unique passwords
+                www_domain = f"www.{root_domain}"
+                if www_domain not in passwords:
+                    passwords.append(www_domain)
+                    
+            if host.startswith('www.'):
+                stripped = host[4:]
+                if stripped not in passwords:
+                    passwords.append(stripped)
+                    
+        # Return unique passwords while preserving order (priority)
         seen = set()
-        return [x for x in passwords if not (x in seen or seen.add(x))]
+        unique_passwords = []
+        for pwd in passwords:
+            if pwd not in seen:
+                seen.add(pwd)
+                unique_passwords.append(pwd)
+                
+        return unique_passwords
