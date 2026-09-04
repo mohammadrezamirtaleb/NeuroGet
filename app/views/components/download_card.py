@@ -20,14 +20,14 @@ def format_size(bytes_size):
     return f"{bytes_size:.1f} PB"
 
 class DownloadCard(CardWidget):
-    def __init__(self, url, raw_filename, save_dir, task_id=None, parent=None):
+    def __init__(self, url, raw_filename, save_dir, task_id=None, status="downloading", parent=None):
         super().__init__(parent)
         self.url = url
         self.filename = urllib.parse.unquote(raw_filename)
         self.save_dir = save_dir
         self.task_id = task_id
         
-        self.state = "downloading"
+        self.state = status
         self.is_archive = False
         self.total_size = 0
         self.downloaded_size = 0
@@ -111,12 +111,21 @@ class DownloadCard(CardWidget):
         self.worker.finished.connect(self.on_finished)
         self.worker.error.connect(self.on_error)
         
-        self.worker.start()
-        
-        # Save state every 5 seconds to prevent DB locking
         self.db_timer = QTimer(self)
         self.db_timer.timeout.connect(self.sync_db)
-        self.db_timer.start(5000)
+        
+        if self.state != "completed" and self.state != "error":
+            self.worker.start()
+            self.db_timer.start(5000)
+        elif self.state == "completed":
+            self.progressBar.setValue(100)
+            self.speedLabel.setText("Completed")
+            self.btnPause.hide()
+            self.btnCancel.hide()
+        elif self.state == "error":
+            self.speedLabel.setText("Error / Cancelled")
+            self.btnPause.setIcon(FIF.PLAY)
+            self.state = "paused" # Treat error as paused so they can retry
 
     def sync_db(self):
         if self.state == "downloading" and self.task_id:
@@ -228,7 +237,7 @@ class DownloadCard(CardWidget):
     def cancel_download(self):
         self.db_timer.stop()
         self.worker.cancel()
+        self.worker.wait(2000) # Wait for thread to finish safely
         if self.task_id:
-            # We could delete from DB, or mark as error/cancelled. Let's mark as error.
             update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="error")
         self.deleteLater()

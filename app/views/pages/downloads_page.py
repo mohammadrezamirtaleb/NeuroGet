@@ -57,6 +57,28 @@ class DownloadsPage(QWidget):
         
         # Initial check on startup
         self.check_clipboard(is_startup=True)
+        self.load_history()
+
+    def load_history(self):
+        from app.models.database import get_all_tasks
+        import os
+        
+        try:
+            tasks = get_all_tasks()
+            for task in tasks:
+                # Re-create cards for incomplete or complete tasks
+                card = DownloadCard(task.url, task.filename, task.save_path, task_id=task.id, parent=self)
+                if task.status == "completed":
+                    card.progressBar.setValue(100)
+                    card.statusLabel.setText("Completed")
+                    card.btnPause.hide()
+                    card.btnCancel.hide()
+                    card.is_completed = True
+                elif task.status == "error":
+                    card.statusLabel.setText("Error / Cancelled")
+                self.scroll_layout.addWidget(card)
+        except Exception:
+            pass
 
     def check_clipboard(self, is_startup=False):
         mime_data = self.clipboard.mimeData()

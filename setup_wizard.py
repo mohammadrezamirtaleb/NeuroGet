@@ -22,8 +22,8 @@ class InstallWorker(QThread):
                 self.finished.emit(False)
                 return
 
-            # Kill any running instances before modifying files
-            os.system('taskkill /F /IM NeuroGet.exe >nul 2>&1')
+            import subprocess
+            subprocess.run(['taskkill', '/F', '/IM', 'NeuroGet.exe'], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             
             install_dir = os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet")
             if os.path.exists(install_dir):
@@ -44,9 +44,9 @@ class InstallWorker(QThread):
                     
             self.progress.emit(90, "Creating shortcuts...")
             
-            # Create Shortcut using VBScript (No dependencies needed!)
+            # Create Shortcut using VBScript
             target_path = os.path.join(install_dir, 'NeuroGet.exe')
-            desktop = os.path.expandvars(r"%USERPROFILE%\Desktop")
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
             shortcut_path = os.path.join(desktop, "NeuroGet.lnk")
             vbs_path = os.path.join(install_dir, "createshortcut.vbs")
             
@@ -62,7 +62,8 @@ oLink.Save
             with open(vbs_path, "w") as f:
                 f.write(vbs_content)
                 
-            os.system(f'cscript //Nologo "{vbs_path}"')
+            import subprocess
+            subprocess.run(['cscript', '//Nologo', vbs_path], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             if os.path.exists(vbs_path):
                 os.remove(vbs_path)
                 
@@ -72,16 +73,18 @@ oLink.Save
                 key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\NeuroGet"
                 key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
                 winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "NeuroGet AI Download Manager")
-                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.0")
+                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.1")
                 winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "NeuroGet")
                 winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, target_path)
                 
-                uninstall_cmd = f'powershell.exe -WindowStyle Hidden -Command "Remove-Item -Recurse -Force \'{install_dir}\' -ErrorAction SilentlyContinue; Remove-Item -Force \'$env:USERPROFILE\\Desktop\\NeuroGet.lnk\' -ErrorAction SilentlyContinue; Remove-Item -Path \'HKCU:\\{key_path}\' -Force -ErrorAction SilentlyContinue"'
+                # Use cmd.exe which handles paths with quotes much safer than interpolated powershell
+                uninstall_cmd = f'cmd.exe /c timeout /t 2 >nul & rmdir /s /q "{install_dir}" & del /q "%USERPROFILE%\\Desktop\\NeuroGet.lnk" & reg delete "HKCU\\{key_path}" /f'
                 winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, uninstall_cmd)
                 winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
                 winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
                 winreg.CloseKey(key)
-            except Exception:
+            except Exception as e:
+                print(e)
                 pass
             
             self.progress.emit(100, "Installation Complete!")

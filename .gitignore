@@ -1,26 +1,12 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environments
-venv/
-env/
-ENV/
-
-# Build and Distribution
+﻿venv/
 build/
 dist/
+__pycache__/
+*.pyc
 *.spec
 payload.zip
-
-# Database
 *.db
-*.sqlite3
+.env
+.idea/
+.vscode/
 
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log

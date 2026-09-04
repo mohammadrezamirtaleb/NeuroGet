@@ -22,14 +22,14 @@ class NeuroSplashScreen(QWidget):
 
         # Opacity Fade-in Animation
         self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
-        self.fade_anim.setDuration(800)
+        self.fade_anim.setDuration(400)
         self.fade_anim.setStartValue(0.0)
         self.fade_anim.setEndValue(1.0)
         self.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         # Loading Progress Animation
         self.prog_anim = QPropertyAnimation(self, b"loadingProgress")
-        self.prog_anim.setDuration(2500)
+        self.prog_anim.setDuration(1000)
         self.prog_anim.setStartValue(0.0)
         self.prog_anim.setEndValue(1.0)
         self.prog_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)

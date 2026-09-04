@@ -25,10 +25,10 @@ class DownloadWorker(QThread):
         self.total_size = 0
         self.downloaded_size = 0
         self.file_path = ""
+        self.part_path = ""
 
     def run(self):
         try:
-            # 1. Fetch metadata (Headers)
             headers = {}
             if self.downloaded_size > 0:
                 headers['Range'] = f"bytes={self.downloaded_size}-"
@@ -36,39 +36,38 @@ class DownloadWorker(QThread):
             try:
                 response = requests.get(self.url, headers=headers, stream=True, timeout=15)
             except requests.exceptions.SSLError:
-                # Fallback for VPNs or proxies that intercept SSL certificates
                 response = requests.get(self.url, headers=headers, stream=True, timeout=15, verify=False)
                 
             response.raise_for_status()
 
-            # Determine Total Size
             if response.status_code == 206: # Partial Content
                 content_length = int(response.headers.get('content-length', 0))
                 self.total_size = self.downloaded_size + content_length
             else:
                 self.total_size = int(response.headers.get('content-length', 0))
-                self.downloaded_size = 0 # Restart if server ignores Range
+                self.downloaded_size = 0 
             
-            # Determine Filename
             if not self.filename:
                 cd = response.headers.get('content-disposition')
                 if cd and 'filename=' in cd:
-                    self.filename = cd.split('filename=')[1].strip('"\'')
+                    raw_name = cd.split('filename=')[1].split(';')[0].strip('"\'')
                 else:
-                    self.filename = urllib.parse.unquote(self.url.split('/')[-1].split('?')[0])
-                    if not self.filename:
-                        self.filename = "downloaded_file"
+                    raw_name = urllib.parse.unquote(self.url.split('/')[-1].split('?')[0])
+                
+                # Prevent Path Traversal
+                raw_name = os.path.basename(raw_name.replace('\\', '/'))
+                self.filename = raw_name if raw_name else "downloaded_file"
             
             self.file_path = os.path.join(self.save_dir, self.filename)
+            self.part_path = self.file_path + ".part"
             
             self.metadata_ready.emit(self.filename, self.total_size)
 
-            # 2. Start Downloading
             mode = 'ab' if self.downloaded_size > 0 else 'wb'
             start_time = time.time()
             bytes_since_start = 0
             
-            with open(self.file_path, mode) as f:
+            with open(self.part_path, mode) as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if self.is_cancelled:
                         break
@@ -86,11 +85,9 @@ class DownloadWorker(QThread):
                         self.downloaded_size += len(chunk)
                         bytes_since_start += len(chunk)
                         
-                        # Calculate Speed and ETA
                         elapsed = time.time() - start_time
-                        if elapsed > 0.5:  # Update UI every 500ms
+                        if elapsed > 0.5:
                             speed = bytes_since_start / elapsed
-                            
                             eta = "Unknown"
                             if speed > 0 and self.total_size > 0:
                                 remaining_bytes = self.total_size - self.downloaded_size
@@ -103,14 +100,17 @@ class DownloadWorker(QThread):
                                     eta = f"{mins}m {secs}s"
                             
                             self.progress_update.emit(self.downloaded_size, speed, eta)
-                            
-                            # Reset interval
                             start_time = time.time()
                             bytes_since_start = 0
 
             if self.is_cancelled:
                 self.error.emit("Download cancelled.")
+            elif self.total_size > 0 and self.downloaded_size < self.total_size:
+                self.error.emit("Connection lost. Download incomplete.")
             else:
+                if os.path.exists(self.file_path):
+                    os.remove(self.file_path)
+                os.rename(self.part_path, self.file_path)
                 self.finished.emit(self.file_path)
 
         except Exception as e:

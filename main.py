@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 
+import qfluentwidgets
 from qfluentwidgets import (NavigationInterface, NavigationItemPosition, FluentWindow,
                             SubtitleLabel, setTheme, Theme, NavigationAvatarWidget)
 from qfluentwidgets import FluentIcon as FIF
@@ -20,7 +21,7 @@ from app.views.splash_screen import NeuroSplashScreen
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
 class MainWindow(FluentWindow):
     def __init__(self):

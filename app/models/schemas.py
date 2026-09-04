@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
-from datetime import datetime
+from sqlalchemy import Column, Integer, String, BigInteger, DateTime
+from datetime import datetime, timezone
 from .database import Base
 
 class DownloadTask(Base):
@@ -9,10 +9,10 @@ class DownloadTask(Base):
     url = Column(String, index=True)
     filename = Column(String)
     save_path = Column(String)
-    total_size = Column(Float, default=0)
-    downloaded_size = Column(Float, default=0)
+    total_size = Column(BigInteger, default=0)
+    downloaded_size = Column(BigInteger, default=0)
     status = Column(String, default="pending") # pending, downloading, paused, completed, error
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
 class SmartRule(Base):
     __tablename__ = "smart_rules"
