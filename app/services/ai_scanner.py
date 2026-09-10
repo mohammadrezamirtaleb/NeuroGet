@@ -42,12 +42,12 @@ class LocalAIDetector:
         ollama_path = shutil.which("ollama") or os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe")
         has_ollama = ollama_online or bool(ollama_models) or (ollama_path and os.path.exists(ollama_path))
 
-        if has_ollama:
+        if ollama_models:
             status = "Online" if ollama_online else "Installed"
             providers.append({
                 "provider": "Ollama",
                 "status": status,
-                "models": ollama_models if ollama_models else ["llama3:latest"]
+                "models": ollama_models
             })
 
         # --- 2. Detect LM Studio ---

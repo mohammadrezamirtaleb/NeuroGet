@@ -48,7 +48,9 @@ class AIClient:
                 if "-" in provider:
                     ollama_model = provider.split("-")[-1].strip()
                 else:
-                    ollama_model = "llama3"
+                    from app.services.ai_scanner import LocalAIDetector
+                    disk_models = LocalAIDetector._scan_ollama_disk_manifests()
+                    ollama_model = disk_models[0] if disk_models else ""
 
             payload = {
                 "model": ollama_model,

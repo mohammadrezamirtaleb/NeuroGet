@@ -216,9 +216,6 @@ class SmartRulesPage(QWidget):
 
         # Cloud Providers List
         self.cloud_providers = [
-            "Local: Ollama - llama3",
-            "Local: LM Studio (Local Server)",
-            "Local: GPT4All",
             "OpenAI (GPT-4o-mini)",
             "Google (Gemini 1.5 Flash)",
             "Anthropic (Claude 3.5 Sonnet)",
