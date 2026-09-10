@@ -6,13 +6,17 @@ from PyQt5.QtWidgets import QApplication
 
 import qfluentwidgets
 from qfluentwidgets import (NavigationInterface, NavigationItemPosition, FluentWindow,
-                            SubtitleLabel, setTheme, Theme, NavigationAvatarWidget)
+                            SubtitleLabel, setTheme, Theme, NavigationAvatarWidget,
+                            InfoBar, InfoBarPosition)
 from qfluentwidgets import FluentIcon as FIF
 
 # Add the project root to sys.path so 'app' module can be found
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.models.database import init_db
+from app.models.database import init_db, get_setting
+from app.common.version import __version__, APP_NAME
+from app.services.updater import UpdateCheckWorker
+from app.views.components.update_dialog import UpdateDialog
 from app.views.pages.downloads_page import DownloadsPage
 from app.views.pages.smart_rules_page import SmartRulesPage
 from app.views.pages.settings_page import SettingsPage
@@ -38,6 +42,9 @@ class MainWindow(FluentWindow):
         self.settings_interface = SettingsPage(self)
 
         self.initNavigation()
+
+        # Check for updates in the background after startup
+        QTimer.singleShot(2500, self.check_updates_on_startup)
 
     def initNavigation(self):
         self.addSubInterface(self.downloads_interface, FIF.DOWNLOAD, 'Active Tasks')
@@ -69,6 +76,25 @@ class MainWindow(FluentWindow):
             setTheme(Theme.LIGHT)
         else:
             setTheme(Theme.DARK)
+
+    def check_updates_on_startup(self):
+        is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
+        if not is_auto_check:
+            return
+
+        self._startup_updater = UpdateCheckWorker(current_version=__version__, parent=self)
+        self._startup_updater.finished_check.connect(self._on_startup_update_detected)
+        self._startup_updater.start()
+
+    def _on_startup_update_detected(self, info: dict):
+        if info.get("has_update"):
+            latest_v = info.get("latest_version", "")
+            InfoBar.info(
+                f"Update Available (v{latest_v})",
+                f"A new version of {APP_NAME} is available. Go to Settings to view changelog and update.",
+                duration=10000,
+                parent=self
+            )
 
 if __name__ == '__main__':
     # Initialize the local database

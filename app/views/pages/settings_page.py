@@ -10,6 +10,9 @@ from qfluentwidgets import FluentIcon as FIF
 from app.models.database import (
     clear_download_history, reset_database, get_setting, set_setting
 )
+from app.common.version import __version__, APP_NAME
+from app.services.updater import UpdateService, UpdateCheckWorker
+from app.views.components.update_dialog import UpdateDialog
 
 class SettingsPage(QWidget):
     def __init__(self, parent=None):
@@ -84,8 +87,35 @@ class SettingsPage(QWidget):
         self.thread_layout.addWidget(self.thread_spin)
         self.thread_layout.addStretch(1)
         self.vbox.addLayout(self.thread_layout)
+
+        # 4. App Updates & Version
+        self.update_section_label = StrongBodyLabel('Application Updates & Version', self)
+        self.vbox.addWidget(self.update_section_label)
+
+        self.update_card = CardWidget(self)
+        up_layout = QVBoxLayout(self.update_card)
+        up_layout.setContentsMargins(16, 14, 16, 14)
+        up_layout.setSpacing(12)
+
+        up_top_row = QHBoxLayout()
+        self.version_info_lbl = StrongBodyLabel(f"{APP_NAME} v{__version__}", self.update_card)
+        self.check_updates_btn = PushButton('Check for Updates', self.update_card, FIF.SYNC)
+        self.check_updates_btn.clicked.connect(self.check_for_updates_clicked)
+
+        up_top_row.addWidget(self.version_info_lbl)
+        up_top_row.addStretch(1)
+        up_top_row.addWidget(self.check_updates_btn)
+        up_layout.addLayout(up_top_row)
+
+        self.auto_check_update_cb = CheckBox('Automatically check for updates on startup', self.update_card)
+        is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
+        self.auto_check_update_cb.setChecked(is_auto_check)
+        self.auto_check_update_cb.stateChanged.connect(lambda s: set_setting("auto_check_updates", "true" if s else "false"))
+        up_layout.addWidget(self.auto_check_update_cb)
+
+        self.vbox.addWidget(self.update_card)
         
-        # 4. Data Management Settings
+        # 5. Data Management Settings
         self.data_label = StrongBodyLabel('Data Management', self)
         self.vbox.addWidget(self.data_label)
         
@@ -94,7 +124,7 @@ class SettingsPage(QWidget):
         self.clear_history_btn = PushButton('Clear Download History', self, FIF.DELETE)
         self.clear_history_btn.clicked.connect(self.prompt_clear_history)
         
-        self.reset_db_btn = PushButton('Reset Database (Factory Reset)', self, FIF.SYNC)
+        self.reset_db_btn = PushButton('Reset Database (Factory Reset)', self, FIF.DELETE)
         self.reset_db_btn.clicked.connect(self.prompt_reset_database)
         
         self.data_layout.addWidget(self.clear_history_btn)
@@ -132,3 +162,35 @@ class SettingsPage(QWidget):
         if w.exec():
             reset_database()
             InfoBar.success('Reset Complete', 'Database has been factory reset successfully.', parent=self.window())
+
+    def check_for_updates_clicked(self):
+        self.check_updates_btn.setEnabled(False)
+        self.check_updates_btn.setText('Checking...')
+
+        self.update_worker = UpdateCheckWorker(current_version=__version__, parent=self)
+        self.update_worker.finished_check.connect(self._on_update_checked)
+        self.update_worker.failed_check.connect(self._on_update_failed)
+        self.update_worker.start()
+
+    def _on_update_checked(self, info: dict):
+        self.check_updates_btn.setEnabled(True)
+        self.check_updates_btn.setText('Check for Updates')
+
+        if info.get("has_update"):
+            dialog = UpdateDialog(info, parent=self.window())
+            dialog.exec_()
+        else:
+            InfoBar.success(
+                'Up to Date',
+                f'{APP_NAME} is already running the latest version (v{__version__}).',
+                parent=self.window()
+            )
+
+    def _on_update_failed(self, error_msg: str):
+        self.check_updates_btn.setEnabled(True)
+        self.check_updates_btn.setText('Check for Updates')
+        InfoBar.warning(
+            'Update Check Failed',
+            f'Unable to check for updates: {error_msg}',
+            parent=self.window()
+        )

@@ -95,7 +95,12 @@ def test_full_ui_suite():
 
     sp.thread_spin.setValue(24)
     assert get_setting("max_threads") == "24"
-    print("[PASS] Settings Page toggles & persistence OK")
+
+    sp.auto_check_update_cb.setChecked(False)
+    assert get_setting("auto_check_updates") == "false"
+    sp.auto_check_update_cb.setChecked(True)
+    assert get_setting("auto_check_updates") == "true"
+    print("[PASS] Settings Page toggles, updates card & persistence OK")
 
     print("\n--- 8. Testing AI Summary Dialog & Mini-RAG ---")
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf:
