@@ -283,8 +283,9 @@ class SmartRulesPage(QWidget):
             InfoBar.success('Saved', f'API Key configured for {provider}', parent=self.window())
 
     def start_scan(self, silent=False):
-        self.scan_btn.setEnabled(False)
-        self.scan_btn.setText('Scanning...')
+        if not silent:
+            self.scan_btn.setEnabled(False)
+            self.scan_btn.setText('Scanning...')
         self._silent_scan = silent
 
         self.scanner_thread = ScannerWorker()
