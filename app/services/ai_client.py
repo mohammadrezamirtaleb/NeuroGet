@@ -42,27 +42,40 @@ class AIClient:
 
         # 1. Local: Ollama
         if "ollama" in provider.lower():
-            try:
-                # Determine model
-                ollama_model = model
-                if not ollama_model or "local:" in ollama_model.lower():
-                    # Extract model name if format is 'Local: Ollama - llama3:latest'
-                    if "-" in provider:
-                        ollama_model = provider.split("-")[-1].strip()
-                    else:
-                        ollama_model = "llama3"
+            # Determine model
+            ollama_model = model
+            if not ollama_model or "local:" in ollama_model.lower():
+                if "-" in provider:
+                    ollama_model = provider.split("-")[-1].strip()
+                else:
+                    ollama_model = "llama3"
 
-                payload = {
-                    "model": ollama_model,
-                    "prompt": f"{system_prompt + '\n\n' if system_prompt else ''}{prompt}",
-                    "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": max_tokens}
-                }
+            payload = {
+                "model": ollama_model,
+                "prompt": f"{system_prompt + '\n\n' if system_prompt else ''}{prompt}",
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": max_tokens}
+            }
+            try:
                 res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=timeout)
                 if res.status_code == 200:
                     return res.json().get("response", "").strip()
             except Exception:
-                pass
+                try:
+                    import shutil
+                    import subprocess
+                    ollama_bin = shutil.which("ollama") or os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe")
+                    if ollama_bin and os.path.exists(ollama_bin):
+                        subprocess.Popen(
+                            [ollama_bin, "serve"],
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                        )
+                        time.sleep(1.5)
+                        res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=timeout)
+                        if res.status_code == 200:
+                            return res.json().get("response", "").strip()
+                except Exception:
+                    pass
 
         # 2. Local: LM Studio or GPT4All (OpenAI-compatible)
         if "lm studio" in provider.lower() or "gpt4all" in provider.lower():

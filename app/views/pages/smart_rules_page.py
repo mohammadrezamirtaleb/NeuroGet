@@ -301,8 +301,8 @@ class SmartRulesPage(QWidget):
         # Add detected local models
         if providers:
             for p in providers:
-                if p.get("status") == "Online":
-                    for m in p.get("models", []):
+                for m in p.get("models", []):
+                    if not m.startswith("("):
                         self.model_combo.addItem(f"Local: {p['provider']} - {m}")
 
         # Add Cloud Providers
