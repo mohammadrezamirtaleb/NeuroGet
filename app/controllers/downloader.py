@@ -11,12 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from requests.adapters import HTTPAdapter
 
 from PyQt5.QtCore import QThread, pyqtSignal
+from app.models.database import get_setting
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-MAX_SEGMENTS = 16
+DEFAULT_MAX_SEGMENTS = 16
 MIN_SEGMENT_SIZE = 2 * 1024 * 1024
 MIN_MULTITHREAD_SIZE = 8 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
@@ -377,8 +378,9 @@ class DownloadWorker(QThread):
                 except Exception:
                     pass
 
+            max_threads = int(get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS)))
             segment_count = min(
-                MAX_SEGMENTS,
+                max_threads,
                 max(1, int(self.total_size // MIN_SEGMENT_SIZE))
             )
 
@@ -431,7 +433,8 @@ class DownloadWorker(QThread):
         self._failure = None
         self._file = open(self.part_path, "r+b")
 
-        workers = min(MAX_SEGMENTS, max(1, len(segments)))
+        max_threads = int(get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS)))
+        workers = min(max_threads, max(1, len(segments)))
         executor = ThreadPoolExecutor(max_workers=workers)
 
         futures = [

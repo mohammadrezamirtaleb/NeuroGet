@@ -1,15 +1,17 @@
 import os
 import re
+import urllib.parse
 
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QApplication,
-    QFileDialog
+    QFileDialog,
+    QDialog
 )
 
-from PyQt5.QtCore import Qt, QUrl, QTimer
+from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
 
 from qfluentwidgets import (
     LineEdit,
@@ -17,15 +19,33 @@ from qfluentwidgets import (
     PushButton,
     TitleLabel,
     StrongBodyLabel,
+    BodyLabel,
+    CaptionLabel,
     ScrollArea,
     ToolButton,
     MessageBox,
-    InfoBar
+    InfoBar,
+    InfoBarPosition
 )
 
 from qfluentwidgets import FluentIcon as FIF
 
 from app.views.components.download_card import DownloadCard
+from app.services.router import SmartRouter
+from app.services.ai_client import AIClient
+from app.models.database import create_task, get_all_tasks, get_setting
+
+
+class NLPromptWorker(QThread):
+    resolved = pyqtSignal(dict)
+
+    def __init__(self, prompt):
+        super().__init__()
+        self.prompt = prompt
+
+    def run(self):
+        res = AIClient.resolve_natural_language_download(self.prompt)
+        self.resolved.emit(res or {})
 
 
 class DownloadsPage(QWidget):
@@ -44,8 +64,9 @@ class DownloadsPage(QWidget):
         self.input_hlayout.setSpacing(12)
 
         self.url_input = LineEdit(self)
-        self.url_input.setPlaceholderText("Paste URL here or Drop a link...")
+        self.url_input.setPlaceholderText("Paste URL here or ask AI (e.g. 'download python 3.12 installer')...")
         self.url_input.setMinimumHeight(40)
+        self.url_input.returnPressed.connect(self.add_download)
 
         self.add_btn = PrimaryPushButton('Download', self, FIF.DOWNLOAD)
         self.add_btn.setMinimumHeight(40)
@@ -83,17 +104,16 @@ class DownloadsPage(QWidget):
         self.clipboard.dataChanged.connect(self.check_clipboard)
 
         self.check_clipboard(is_startup=True)
-
         self.load_history()
 
     def load_history(self):
-        from app.models.database import get_all_tasks
-
         try:
             tasks = get_all_tasks()
 
             for task in tasks:
                 status = getattr(task, "status", "pending") or "pending"
+                category = getattr(task, "category", "General") or "General"
+                threat = getattr(task, "threat_level", "safe") or "safe"
                 auto_start = status in ("pending", "downloading")
 
                 card = DownloadCard(
@@ -102,6 +122,8 @@ class DownloadsPage(QWidget):
                     task.save_path,
                     task_id=task.id,
                     status=status,
+                    category=category,
+                    threat_level=threat,
                     auto_start=auto_start,
                     parent=self
                 )
@@ -142,13 +164,18 @@ class DownloadsPage(QWidget):
             QTimer.singleShot(250, self.add_download)
 
     def add_download(self):
-        url = self.url_input.text().strip()
+        text = self.url_input.text().strip()
 
-        if not url:
+        if not text:
+            return
+
+        # Check if input is a natural language prompt instead of direct URL
+        if not text.startswith(("http://", "https://", "ftp://")):
+            self.handle_natural_language_prompt(text)
             return
 
         self.create_download_card(
-            url,
+            text,
             auto_start=True,
             status="pending",
             insert_top=True
@@ -156,25 +183,55 @@ class DownloadsPage(QWidget):
 
         self.url_input.clear()
 
+    def handle_natural_language_prompt(self, prompt_text):
+        InfoBar.info("AI Assistant", "Resolving download request...", parent=self.window(), duration=2000)
+        self.nl_worker = NLPromptWorker(prompt_text)
+        self.nl_worker.resolved.connect(lambda res: self._on_nl_resolved(res, prompt_text))
+        self.nl_worker.start()
+
+    def _on_nl_resolved(self, result, original_prompt):
+        software_name = result.get("software_name", original_prompt)
+        url = result.get("official_url") or result.get("direct_link_hint")
+
+        if url and url.startswith("http"):
+            w = MessageBox(
+                'AI Download Assistant',
+                f'Found official source for "{software_name}":\n\n{url}\n\nStart download now?',
+                self.window()
+            )
+            w.yesButton.setText('Download')
+            w.cancelButton.setText('Cancel')
+
+            if w.exec():
+                self.url_input.setText(url)
+                self.add_download()
+        else:
+            InfoBar.warning(
+                "AI Assistant",
+                f"Could not resolve a direct download link for '{original_prompt}'. Please provide a direct URL.",
+                parent=self.window(),
+                duration=4000
+            )
+
     def create_download_card(self, url, auto_start=True, status="pending", insert_top=True):
-        from app.models.database import create_task
+        raw_name = url.split('/')[-1].split('?')[0] if '/' in url else 'unknown_file.bin'
+        if not raw_name or raw_name == url:
+            raw_name = "download_file.bin"
 
-        filename = url.split('/')[-1].split('?')[0] if '/' in url else 'unknown_file.bin'
-
-        if not filename or filename == url:
-            filename = "download"
-
-        save_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        # Apply Smart Routing & Category Discovery
+        base_downloads = get_setting("default_download_dir", os.path.join(os.path.expanduser("~"), "Downloads"))
+        save_dir, category = SmartRouter.route_download(url, raw_name, default_dir=base_downloads)
         os.makedirs(save_dir, exist_ok=True)
 
-        task_id = create_task(url, filename, save_dir)
+        task_id = create_task(url, raw_name, save_dir, category=category)
 
         card = DownloadCard(
             url,
-            filename,
+            raw_name,
             save_dir,
             task_id=task_id,
             status=status,
+            category=category,
             auto_start=auto_start,
             parent=self
         )
@@ -258,7 +315,6 @@ class DownloadsPage(QWidget):
 
         while self.batch_queue:
             card = self.batch_queue.pop(0)
-
             self.active_batch_card = card
             card.start_download()
             return
