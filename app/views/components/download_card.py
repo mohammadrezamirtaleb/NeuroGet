@@ -138,6 +138,7 @@ class DownloadCard(CardWidget):
             self.filename = AIClient._heuristic_clean_name(self.filename)
 
         self.setFixedHeight(115)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.hBoxLayout = QHBoxLayout(self)
         self.hBoxLayout.setContentsMargins(20, 16, 20, 16)
@@ -416,7 +417,25 @@ class DownloadCard(CardWidget):
     def on_error(self, err_msg):
         self.state = "error"
         self.speedLabel.setText("Error")
-        self.etaLabel.setText(str(err_msg))
+
+        err_str = str(err_msg)
+        short_err = "Download failed"
+        err_lower = err_lower = err_str.lower()
+        if "timeout" in err_lower or "timed out" in err_lower:
+            short_err = "Connection timed out"
+        elif "resolve" in err_lower or "dns" in err_lower or "getaddrinfo" in err_lower:
+            short_err = "Host not found"
+        elif "refused" in err_lower:
+            short_err = "Connection refused"
+        elif "404" in err_str:
+            short_err = "File not found (404)"
+        elif "403" in err_str:
+            short_err = "Access denied (403)"
+        elif "cancelled" in err_lower:
+            short_err = "Cancelled"
+
+        self.etaLabel.setText(short_err)
+        self.etaLabel.setToolTip(err_str)
         self.btnPause.setIcon(FIF.SYNC)
         self.db_timer.stop()
 
@@ -428,10 +447,10 @@ class DownloadCard(CardWidget):
                 status="error"
             )
 
-        if "cancelled" not in str(err_msg).lower():
+        if "cancelled" not in err_lower:
             InfoBar.error(
                 "Download Failed",
-                f"Failed to download {self.filename}: {err_msg}",
+                f"Failed to download {self.filename}: {short_err}",
                 parent=self.window()
             )
 

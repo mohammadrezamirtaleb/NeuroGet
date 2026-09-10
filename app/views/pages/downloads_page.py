@@ -8,7 +8,8 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QApplication,
     QFileDialog,
-    QDialog
+    QDialog,
+    QSizePolicy
 )
 
 from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
@@ -84,10 +85,12 @@ class DownloadsPage(QWidget):
 
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setStyleSheet("QScrollArea {background: transparent; border: none;}")
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setStyleSheet("QWidget {background: transparent;}")
+        self.scroll_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignTop)
@@ -114,7 +117,10 @@ class DownloadsPage(QWidget):
                 status = getattr(task, "status", "pending") or "pending"
                 category = getattr(task, "category", "General") or "General"
                 threat = getattr(task, "threat_level", "safe") or "safe"
-                auto_start = status in ("pending", "downloading")
+
+                # Incomplete tasks loaded from previous sessions should be paused, not auto-started
+                if status in ("pending", "downloading"):
+                    status = "paused"
 
                 card = DownloadCard(
                     task.url,
@@ -124,7 +130,7 @@ class DownloadsPage(QWidget):
                     status=status,
                     category=category,
                     threat_level=threat,
-                    auto_start=auto_start,
+                    auto_start=False,
                     parent=self
                 )
 

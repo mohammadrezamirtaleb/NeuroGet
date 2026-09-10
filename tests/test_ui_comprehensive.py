@@ -119,6 +119,13 @@ def test_full_ui_suite():
     finally:
         os.remove(sample_doc)
 
+    # Clean up test tasks created during test
+    from app.models.database import SessionLocal
+    from app.models.schemas import DownloadTask
+    with SessionLocal() as session:
+        session.query(DownloadTask).delete()
+        session.commit()
+
     print("\n=======================================================")
     print("ALL TABS, BUTTONS, MECHANISMS & WORKERS PASSED 100%!")
     print("=======================================================")
