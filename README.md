@@ -229,5 +229,5 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <p align="center">
   Crafted with precision for next-generation downloading. <br>
-  <strong>NeuroGet © 2026 • Mohammadreza Mirtaleb</strong>
+  <strong>NeuroGet © 2026 • Mohammadreza Mirtaleb & Mahdi Ajami</strong>
 </p>
