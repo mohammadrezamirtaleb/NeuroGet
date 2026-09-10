@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (SubtitleLabel, ProgressBar, PrimaryPushButton, 
                             BodyLabel, InfoBar, setTheme, Theme, ImageLabel, LineEdit)
 
+from app.common.version import __version__, APP_NAME
+
 class InstallWorker(QThread):
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(bool)
@@ -72,9 +74,9 @@ oLink.Save
                 import winreg
                 key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\NeuroGet"
                 key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
-                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "NeuroGet AI Download Manager")
-                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.1")
-                winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "NeuroGet")
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, f"{APP_NAME} AI Download Manager")
+                winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, __version__)
+                winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, APP_NAME)
                 winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, target_path)
                 
                 # Use cmd.exe which handles paths with quotes much safer than interpolated powershell
