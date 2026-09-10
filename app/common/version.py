@@ -3,7 +3,7 @@ NeuroGet Version and Repository Configuration
 """
 
 APP_NAME = "NeuroGet"
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 GITHUB_OWNER = "mohammadrezamirtaleb"
 GITHUB_REPO = "NeuroGet"
