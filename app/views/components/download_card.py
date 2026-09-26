@@ -346,10 +346,11 @@ class DownloadCard(CardWidget):
     def on_metadata_ready(self, real_filename, total_size):
         self.total_size = total_size
         
-        # Clean rename via AI / Heuristic
+        # Use fast heuristic renaming on UI thread to avoid GUI freeze
+        # (AIClient.clean_filename makes synchronous HTTP calls)
         enable_renaming = get_setting("enable_ai_clean_renaming", "true").lower() in ("true", "1", "yes")
         if enable_renaming:
-            self.filename = AIClient.clean_filename(real_filename, self.url)
+            self.filename = AIClient._heuristic_clean_name(real_filename)
         else:
             self.filename = real_filename
 
@@ -420,7 +421,7 @@ class DownloadCard(CardWidget):
 
         err_str = str(err_msg)
         short_err = "Download failed"
-        err_lower = err_lower = err_str.lower()
+        err_lower = err_str.lower()
         if "timeout" in err_lower or "timed out" in err_lower:
             short_err = "Connection timed out"
         elif "resolve" in err_lower or "dns" in err_lower or "getaddrinfo" in err_lower:
@@ -543,6 +544,7 @@ class DownloadCard(CardWidget):
             self.speedLabel.setText("Paused")
             self.etaLabel.setText("")
             self.btnPause.setIcon(FIF.PLAY)
+            self.db_timer.stop()  # Stop periodic DB writes while paused
             if self.task_id:
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="paused")
 
@@ -554,6 +556,7 @@ class DownloadCard(CardWidget):
                 self.worker.resume()
                 self.speedLabel.setText("Connecting...")
                 self.btnPause.setIcon(FIF.PAUSE)
+                self.db_timer.start(5000)  # Restart periodic DB writes on resume
 
             if self.task_id:
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="downloading")
@@ -574,8 +577,25 @@ class DownloadCard(CardWidget):
     def cancel_download(self):
         self.db_timer.stop()
         if self.worker is not None:
+            # Disconnect all signals to prevent crash when widget is deleted
+            try:
+                self.worker.metadata_ready.disconnect()
+                self.worker.progress_update.disconnect()
+                self.worker.finished.disconnect()
+                self.worker.error.disconnect()
+            except (TypeError, RuntimeError):
+                pass
             self.worker.cancel()
-            self.worker.wait(2000)
+            self.worker.wait(3000)
+
+        # Also stop any running extract worker
+        if hasattr(self, 'extract_worker') and self.extract_worker is not None:
+            try:
+                self.extract_worker.finished_extract.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            self.extract_worker.quit()
+            self.extract_worker.wait(2000)
 
         if self.task_id:
             update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="error")

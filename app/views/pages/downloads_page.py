@@ -32,8 +32,11 @@ from qfluentwidgets import (
 from qfluentwidgets import FluentIcon as FIF
 
 from app.views.components.download_card import DownloadCard
+from app.views.components.update_dialog import UpdateDialog
 from app.services.router import SmartRouter
 from app.services.ai_client import AIClient
+from app.services.updater import UpdateCheckWorker
+from app.common.version import __version__, APP_NAME
 from app.models.database import create_task, get_all_tasks, get_setting
 
 
@@ -58,8 +61,14 @@ class DownloadsPage(QWidget):
         self.vbox.setContentsMargins(40, 40, 40, 40)
         self.vbox.setSpacing(20)
 
+        self.header_layout = QHBoxLayout()
         self.title_label = TitleLabel('Downloads', self)
-        self.vbox.addWidget(self.title_label)
+        self.update_btn = PushButton('Check for Updates', self, FIF.UPDATE)
+        self.update_btn.clicked.connect(self.check_for_updates)
+        self.header_layout.addWidget(self.title_label)
+        self.header_layout.addStretch()
+        self.header_layout.addWidget(self.update_btn)
+        self.vbox.addLayout(self.header_layout)
 
         self.input_hlayout = QHBoxLayout()
         self.input_hlayout.setSpacing(12)
@@ -339,3 +348,38 @@ class DownloadsPage(QWidget):
 
         elif was_batch and self.active_batch_card is None and self.batch_queue:
             self.start_next_batch()
+
+    def check_for_updates(self):
+        self.update_btn.setEnabled(False)
+        self.update_btn.setText('Checking...')
+
+        channel = get_setting("update_channel", "stable")
+        self.update_worker = UpdateCheckWorker(current_version=__version__, channel=channel, parent=self)
+        self.update_worker.finished_check.connect(self._on_update_checked)
+        self.update_worker.failed_check.connect(self._on_update_failed)
+        self.update_worker.start()
+
+    def _on_update_checked(self, info: dict):
+        self.update_btn.setEnabled(True)
+        self.update_btn.setText('Check for Updates')
+
+        if info.get("has_update"):
+            dialog = UpdateDialog(info, parent=self.window())
+            dialog.exec_()
+        else:
+            InfoBar.success(
+                'Up to Date',
+                f'{APP_NAME} is up to date (v{__version__}).',
+                parent=self.window(),
+                duration=3000
+            )
+
+    def _on_update_failed(self, error_msg: str):
+        self.update_btn.setEnabled(True)
+        self.update_btn.setText('Check for Updates')
+        InfoBar.warning(
+            'Update Check Failed',
+            f'Unable to check for updates: {error_msg}',
+            parent=self.window(),
+            duration=4000
+        )

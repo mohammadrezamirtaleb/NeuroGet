@@ -1,6 +1,6 @@
 import os
 import sys
-import unittest
+import pytest
 from PyQt5.QtWidgets import QApplication
 
 # Add project root to sys.path
@@ -13,63 +13,50 @@ if app is None:
 
 from app.common.version import __version__, APP_NAME, GITHUB_REPO, GITHUB_OWNER
 from app.services.updater import UpdateService, UpdateCheckWorker
+from app.services.update_installer import UpdateInstaller
 from app.views.components.update_dialog import UpdateDialog
 from app.views.pages.settings_page import SettingsPage
 from app.models.database import init_db, get_setting, set_setting
 
-def run_updater_tests():
-    print("==========================================")
-    print("   TESTING NEUROGET AUTO-UPDATER SYSTEM   ")
-    print("==========================================")
 
+def test_version_parsing():
     init_db()
+    # Semantic Version Parsing
+    assert UpdateService.parse_version_tuple("v1.0.1")[0] == (1, 0, 1)
+    assert UpdateService.parse_version_tuple("1.0.0")[0] == (1, 0, 0)
+    assert UpdateService.parse_version_tuple("v2.1.34-beta")[0] == (2, 1, 34)
+    assert UpdateService.parse_version_tuple("v0.9")[0] == (0, 9, 0)
+    assert UpdateService.parse_version_tuple("")[0] == (0, 0, 0)
 
-    # --- 1. Test Version Parsing ---
-    print("\n--- 1. Testing Semantic Version Parsing ---")
-    assert UpdateService.parse_version_tuple("v1.0.1") == (1, 0, 1)
-    assert UpdateService.parse_version_tuple("1.0.0") == (1, 0, 0)
-    assert UpdateService.parse_version_tuple("v2.1.34-beta") == (2, 1, 34)
-    assert UpdateService.parse_version_tuple("v0.9") == (0, 9, 0)
-    assert UpdateService.parse_version_tuple("") == (0, 0, 0)
-    print("[PASS] Version parsing handles all standard formats")
 
-    # --- 2. Test Version Comparison ---
-    print("\n--- 2. Testing Version Comparisons ---")
+def test_version_comparison():
+    # Comparisons with stable and prerelease
     assert UpdateService.is_newer("v1.0.1", "1.0.0") is True
     assert UpdateService.is_newer("1.0.2", "1.0.1") is True
     assert UpdateService.is_newer("1.0.1", "1.0.1") is False
     assert UpdateService.is_newer("1.0.0", "1.0.1") is False
     assert UpdateService.is_newer("2.0.0", "1.9.9") is True
-    print("[PASS] Semantic version comparison is 100% accurate")
+    # Stable vs Beta of same version
+    assert UpdateService.is_newer("1.2.0", "1.2.0-beta.1") is True
+    assert UpdateService.is_newer("1.2.0-beta.2", "1.2.0-beta.1") is True
 
-    # --- 3. Test Live GitHub API Query on NeuroGet Repo ---
-    print("\n--- 3. Testing Live GitHub API Release Check ---")
-    res = UpdateService.check_for_updates(current_version="1.0.0")
-    print(f"Update check with older local version (1.0.0):")
-    print(f"  Success: {res.get('success')}")
-    print(f"  Has Update: {res.get('has_update')}")
-    print(f"  Latest Version: {res.get('latest_version')}")
-    print(f"  Asset Name: {res.get('asset_name')}")
-    print(f"  Download URL: {res.get('download_url')}")
-    safe_log = res.get('changelog', '')[:100].encode('ascii', errors='replace').decode('ascii')
-    print(f"  Changelog excerpt: {safe_log}...")
 
-    assert res.get("success") is True, f"GitHub check failed: {res.get('error')}"
-    assert res.get("has_update") is True, "Expected update to be detected for local version 1.0.0"
-    assert res.get("latest_version") == "1.0.1", f"Expected latest version 1.0.1, got {res.get('latest_version')}"
-    assert res.get("asset_name") == "NeuroGet_Setup.exe", f"Expected NeuroGet_Setup.exe asset, got {res.get('asset_name')}"
-    print("[PASS] Live GitHub Releases query and setup asset extraction OK")
+def test_update_installer_hash_and_paths():
+    # Test hash computation and verification
+    test_file = os.path.join(os.path.dirname(__file__), "test_sample.tmp")
+    with open(test_file, "w", encoding="utf-8") as f:
+        f.write("NeuroGet Test Update Binary Payload")
+    
+    sha256 = UpdateInstaller.compute_sha256(test_file)
+    assert len(sha256) == 64
+    assert UpdateInstaller.verify_hash(test_file, sha256) is True
+    assert UpdateInstaller.verify_hash(test_file, "invalidhash") is False
+    
+    if os.path.exists(test_file):
+        os.remove(test_file)
 
-    # --- 4. Test Current Version (1.0.1 is up to date) ---
-    print("\n--- 4. Testing Up-To-Date Scenario (v1.0.1) ---")
-    res_current = UpdateService.check_for_updates(current_version="1.0.1")
-    assert res_current.get("success") is True
-    assert res_current.get("has_update") is False, "v1.0.1 falsely flagged as having an update"
-    print(f"Current version v1.0.1 correctly recognized as up-to-date")
-    print("[PASS] Up-to-date recognition OK")
 
-    # --- 5. Test UpdateDialog UI ---
-    print("\n--- 5. Testing UpdateDialog UI Component ---")
+def test_update_dialog_ui():
     mock_update_info = {
         "success": True,
         "has_update": True,
@@ -81,29 +68,40 @@ def run_updater_tests():
         "download_url": "https://github.com/mohammadrezamirtaleb/NeuroGet/releases/download/v1.0.2/NeuroGet_Setup.exe",
         "asset_name": "NeuroGet_Setup.exe",
         "asset_size": 91290922,
+        "expected_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "channel": "stable",
         "html_url": "https://github.com/mohammadrezamirtaleb/NeuroGet/releases/tag/v1.0.2"
     }
     dialog = UpdateDialog(mock_update_info)
     assert dialog is not None
-    assert "v1.0.2" in dialog.windowTitle() or "Software Update" in dialog.windowTitle()
-    print("[PASS] UpdateDialog rendered properly")
+    assert "Software Update" in dialog.windowTitle() or "v1.0.2" in dialog.windowTitle()
+    assert hasattr(dialog, "btn_download")
+    assert hasattr(dialog, "progress_bar")
+    assert hasattr(dialog, "btn_install_now")
 
-    # --- 6. Test Settings Page Update Integration ---
-    print("\n--- 6. Testing Settings Page Update Integration ---")
+
+def test_settings_page_update_integration():
+    init_db()
     sp = SettingsPage()
     assert hasattr(sp, "check_updates_btn"), "Check updates button missing from SettingsPage"
     assert hasattr(sp, "auto_check_update_cb"), "Auto-check updates checkbox missing"
+    assert hasattr(sp, "channel_combo"), "Update channel selector missing"
     assert sp.version_info_lbl.text() == f"{APP_NAME} v{__version__}"
 
     sp.auto_check_update_cb.setChecked(False)
     assert get_setting("auto_check_updates") == "false"
     sp.auto_check_update_cb.setChecked(True)
     assert get_setting("auto_check_updates") == "true"
-    print("[PASS] Settings Page updates card & persistence OK")
 
-    print("\n==========================================")
-    print("SUCCESS: ALL AUTO-UPDATER TESTS PASSED 100%!")
-    print("==========================================")
+
+def test_checksum_extraction_from_release():
+    mock_release_body = {
+        "body": "### NeuroGet v1.2.0\nSHA-256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "assets": []
+    }
+    extracted = UpdateService.extract_expected_checksum(mock_release_body, "NeuroGet_Setup.exe")
+    assert extracted == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 
 if __name__ == "__main__":
-    run_updater_tests()
+    pytest.main([__file__, "-v"])

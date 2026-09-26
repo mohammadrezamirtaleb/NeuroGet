@@ -65,9 +65,9 @@ def build():
         "--hidden-import=app.services.router",
         "--hidden-import=app.services.threat_detector",
         "--hidden-import=app.services.updater",
+        "--hidden-import=app.services.update_installer",
         "--hidden-import=app.controllers",
-        "--hidden-import=app.controllers.download_manager",
-        "--hidden-import=app.controllers.worker",
+        "--hidden-import=app.controllers.downloader",
         "--hidden-import=app.views",
         "--hidden-import=app.views.splash_screen",
         "--hidden-import=app.views.pages.downloads_page",
@@ -141,6 +141,11 @@ def build():
     size_mb = os.path.getsize(setup_exe) / (1024 * 1024)
     sha256 = compute_sha256(setup_exe)
 
+    # Write checksums.txt file
+    checksum_file = os.path.join(dist_dir, "checksums.txt")
+    with open(checksum_file, "w", encoding="utf-8") as f:
+        f.write(f"{sha256} *NeuroGet_Setup.exe\n")
+
     # Clean intermediate payload.zip
     if os.path.exists(payload_zip):
         os.remove(payload_zip)
@@ -149,6 +154,7 @@ def build():
     print("   BUILD SUCCESSFUL: PRODUCTION INSTALLER READY!   ")
     print("=" * 60)
     print(f"  Installer File : {setup_exe}")
+    print(f"  Checksum File  : {checksum_file}")
     print(f"  File Size      : {size_mb:.2f} MB ({os.path.getsize(setup_exe):,} bytes)")
     print(f"  SHA-256 Digest : {sha256}")
     print("=" * 60)

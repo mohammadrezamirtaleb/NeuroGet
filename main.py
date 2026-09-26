@@ -54,6 +54,14 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.settings_interface, FIF.SETTING, 'Settings', NavigationItemPosition.BOTTOM)
         
         self.navigationInterface.addItem(
+            routeKey='CheckUpdates',
+            icon=FIF.UPDATE,
+            text='Check for Updates',
+            onClick=self.manual_check_updates,
+            position=NavigationItemPosition.BOTTOM
+        )
+
+        self.navigationInterface.addItem(
             routeKey='ThemeToggle',
             icon=FIF.CONSTRACT,
             text='Toggle Theme',
@@ -77,24 +85,86 @@ class MainWindow(FluentWindow):
         else:
             setTheme(Theme.DARK)
 
+    def manual_check_updates(self):
+        channel = get_setting("update_channel", "stable")
+        self._manual_updater = UpdateCheckWorker(current_version=__version__, channel=channel, parent=self)
+        self._manual_updater.finished_check.connect(self._on_manual_update_checked)
+        self._manual_updater.failed_check.connect(self._on_manual_update_failed)
+        self._manual_updater.start()
+
+    def _on_manual_update_checked(self, info: dict):
+        if info.get("has_update"):
+            dialog = UpdateDialog(info, parent=self)
+            dialog.exec_()
+        else:
+            InfoBar.success(
+                'Up to Date',
+                f'{APP_NAME} is already running the latest version (v{__version__}).',
+                parent=self,
+                duration=3500
+            )
+
+    def _on_manual_update_failed(self, error_msg: str):
+        InfoBar.warning(
+            'Update Check Failed',
+            f'Unable to check for updates: {error_msg}',
+            parent=self,
+            duration=4000
+        )
+
     def check_updates_on_startup(self):
         is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
         if not is_auto_check:
             return
 
-        self._startup_updater = UpdateCheckWorker(current_version=__version__, parent=self)
+        channel = get_setting("update_channel", "stable")
+        self._startup_updater = UpdateCheckWorker(current_version=__version__, channel=channel, parent=self)
         self._startup_updater.finished_check.connect(self._on_startup_update_detected)
         self._startup_updater.start()
 
     def _on_startup_update_detected(self, info: dict):
         if info.get("has_update"):
-            latest_v = info.get("latest_version", "")
-            InfoBar.info(
-                f"Update Available (v{latest_v})",
-                f"A new version of {APP_NAME} is available. Go to Settings to view changelog and update.",
-                duration=10000,
-                parent=self
-            )
+            dialog = UpdateDialog(info, parent=self)
+            dialog.exec_()
+
+    def closeEvent(self, event):
+        """Gracefully shut down all background threads to prevent Qt segfaults."""
+        # Cancel all active download workers in DownloadsPage
+        if hasattr(self, 'downloads_interface'):
+            layout = self.downloads_interface.scroll_layout
+            for i in range(layout.count()):
+                widget = layout.itemAt(i).widget()
+                if widget and hasattr(widget, 'worker') and widget.worker is not None:
+                    try:
+                        widget.worker.cancel()
+                        widget.worker.wait(2000)
+                    except Exception:
+                        pass
+                if widget and hasattr(widget, 'db_timer'):
+                    try:
+                        widget.db_timer.stop()
+                    except Exception:
+                        pass
+
+        # Stop update checker if running
+        if hasattr(self, '_startup_updater') and self._startup_updater.isRunning():
+            try:
+                self._startup_updater.quit()
+                self._startup_updater.wait(1000)
+            except Exception:
+                pass
+
+        # Stop scanner thread if running
+        if hasattr(self, 'rules_interface') and hasattr(self.rules_interface, 'scanner_thread'):
+            scanner = self.rules_interface.scanner_thread
+            if scanner is not None and scanner.isRunning():
+                try:
+                    scanner.quit()
+                    scanner.wait(1000)
+                except Exception:
+                    pass
+
+        super().closeEvent(event)
 
 if __name__ == '__main__':
     # Initialize the local database

@@ -53,9 +53,10 @@ class AIClient:
                     disk_models = LocalAIDetector._scan_ollama_disk_manifests()
                     ollama_model = disk_models[0] if disk_models else ""
 
+            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
             payload = {
                 "model": ollama_model,
-                "prompt": f"{system_prompt + '\n\n' if system_prompt else ''}{prompt}",
+                "prompt": full_prompt,
                 "stream": False,
                 "options": {"temperature": 0.3, "num_predict": max_tokens}
             }
@@ -136,7 +137,7 @@ class AIClient:
             try:
                 gemini_model = model or "gemini-1.5-flash"
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
-                full_text = f"{system_prompt + '\n\n' if system_prompt else ''}{prompt}"
+                full_text = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
                 payload = {
                     "contents": [{"parts": [{"text": full_text}]}],
                     "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens}

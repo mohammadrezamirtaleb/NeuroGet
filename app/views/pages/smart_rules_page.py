@@ -21,6 +21,7 @@ from app.models.database import (
 
 
 class TestRouteWorker(QThread):
+    __test__ = False  # Prevent pytest from collecting this as a test class
     finished_test = pyqtSignal(dict)
 
     def __init__(self, test_input):
@@ -57,9 +58,9 @@ class AddRuleDialog(QDialog):
 
         self.vbox.addWidget(StrongBodyLabel("Condition Type:", self))
         self.type_combo = ComboBox(self)
-        self.type_combo.addItem("File Extension Match (.ext)", "ext")
-        self.type_combo.addItem("Filename Contains Keyword", "contains")
-        self.type_combo.addItem("AI Semantic Category", "ai_category")
+        self.type_combo.addItem("File Extension Match (.ext)", userData="ext")
+        self.type_combo.addItem("Filename Contains Keyword", userData="contains")
+        self.type_combo.addItem("AI Semantic Category", userData="ai_category")
         self.vbox.addWidget(self.type_combo)
 
         self.vbox.addWidget(StrongBodyLabel("Condition Value:", self))
@@ -274,7 +275,7 @@ class SmartRulesPage(QWidget):
         api_input = LineEdit(w.widget)
         api_input.setText(saved_key)
         api_input.setPlaceholderText("sk-...")
-        w.viewLayout.addWidget(api_input)
+        w.textLayout.addWidget(api_input)
 
         if w.exec():
             api_key = api_input.text().strip()

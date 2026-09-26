@@ -24,8 +24,8 @@ CHUNK_SIZE = 1024 * 1024
 
 
 class DownloadWorker(QThread):
-    metadata_ready = pyqtSignal(str, int)
-    progress_update = pyqtSignal(int, float, str)
+    metadata_ready = pyqtSignal(str, object)        # object allows >2GB int values
+    progress_update = pyqtSignal(object, float, str) # object avoids int32 overflow
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
@@ -91,6 +91,11 @@ class DownloadWorker(QThread):
         session.mount("http://", adapter)
         session.mount("https://", adapter)
 
+        # Use a standard browser User-Agent to avoid HTTP 403 blocks
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        })
+
         return session
 
     def _open_stream(self, session, headers=None):
@@ -101,20 +106,20 @@ class DownloadWorker(QThread):
                 self.url,
                 headers=headers,
                 stream=True,
-                timeout=20
+                timeout=(10, 30)  # (connect_timeout, read_timeout)
             )
         except requests.exceptions.SSLError:
             return session.get(
                 self.url,
                 headers=headers,
                 stream=True,
-                timeout=20,
+                timeout=(10, 30),
                 verify=False
             )
 
     def _extract_filename(self, response):
         if self.filename:
-            return self.filename
+            return self._sanitize_filename(self.filename)
 
         name = ""
         cd = response.headers.get("content-disposition", "")
@@ -135,6 +140,19 @@ class DownloadWorker(QThread):
             name = os.path.basename(urllib.parse.unquote(path))
 
         name = os.path.basename(name.replace("\\", "/")).strip()
+        return self._sanitize_filename(name) or "downloaded_file"
+
+    @staticmethod
+    def _sanitize_filename(name):
+        """Remove Windows-illegal characters and reserved device names."""
+        # Replace illegal chars: \ / : * ? " < > |
+        name = re.sub(r'[\\/:*?"<>|]', '_', name)
+        # Strip trailing dots and spaces (NTFS silently truncates these)
+        name = name.rstrip('. ')
+        # Block Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+        base = name.split('.')[0].upper()
+        if re.match(r'^(CON|PRN|AUX|NUL|COM\d|LPT\d)$', base):
+            name = f"_{name}"
         return name or "downloaded_file"
 
     def _parse_total_size(self, headers, fallback=0):
@@ -174,13 +192,24 @@ class DownloadWorker(QThread):
         )
 
     def _finalize(self):
-        if os.path.exists(self.file_path):
+        # Use os.replace (atomic, overwrites existing) with retry for Windows file locks
+        for attempt in range(5):
             try:
-                os.remove(self.file_path)
+                os.replace(self.part_path, self.file_path)
+                break
+            except PermissionError:
+                # Windows Defender or Explorer may briefly lock the file
+                time.sleep(0.5 * (2 ** attempt))
             except Exception:
-                pass
-
-        os.rename(self.part_path, self.file_path)
+                # Fallback: try removing target first then rename
+                try:
+                    if os.path.exists(self.file_path):
+                        os.remove(self.file_path)
+                    os.rename(self.part_path, self.file_path)
+                    break
+                except Exception:
+                    if attempt == 4:
+                        raise
 
         if os.path.exists(self._meta_path):
             try:
@@ -415,14 +444,21 @@ class DownloadWorker(QThread):
 
     def _save_meta(self, segments):
         try:
+            # Deep-copy segments under lock to avoid data races
+            with self._state_lock:
+                safe_segments = [[s[0], s[1], s[2]] for s in segments]
+
             meta = {
                 "url": self.url,
                 "total_size": self.total_size,
-                "segments": segments
+                "segments": safe_segments
             }
 
-            with open(self._meta_path, "w", encoding="utf-8") as f:
+            # Atomic write: serialize to .tmp, then os.replace to prevent corruption
+            tmp_path = self._meta_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f)
+            os.replace(tmp_path, self._meta_path)
         except Exception:
             pass
 
@@ -543,6 +579,13 @@ class DownloadWorker(QThread):
                         return False
 
                     if chunk:
+                        # Clamp chunk to segment boundary to prevent overwriting next segment
+                        remaining = end - pos + 1
+                        if remaining <= 0:
+                            break
+                        if len(chunk) > remaining:
+                            chunk = chunk[:remaining]
+
                         with self._file_lock:
                             self._file.seek(pos)
                             self._file.write(chunk)
@@ -557,17 +600,19 @@ class DownloadWorker(QThread):
                 return True
 
             except Exception as e:
-                if response is not None:
-                    try:
-                        response.close()
-                    except Exception:
-                        pass
-
                 if attempt == retries - 1 or self.is_cancelled:
                     self._failure = str(e)
                     self.cancel()
                     return False
 
                 time.sleep(1 + attempt)
+
+            finally:
+                # Always close response to prevent connection pool exhaustion
+                if response is not None:
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
 
         return False

@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import Qt
 from qfluentwidgets import (
     TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel, LineEdit, 
-    PushButton, CheckBox, SpinBox, MessageBox, InfoBar, CardWidget
+    PushButton, CheckBox, SpinBox, MessageBox, InfoBar, CardWidget, ComboBox
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -107,6 +107,26 @@ class SettingsPage(QWidget):
         up_top_row.addWidget(self.check_updates_btn)
         up_layout.addLayout(up_top_row)
 
+        # Channel Selection Row
+        channel_row = QHBoxLayout()
+        self.channel_lbl = StrongBodyLabel('Update Channel:', self.update_card)
+        self.channel_combo = ComboBox(self.update_card)
+        self.channel_combo.addItem("Stable (Recommended)", userData="stable")
+        self.channel_combo.addItem("Beta (Early Access & Pre-releases)", userData="beta")
+        
+        saved_channel = get_setting("update_channel", "stable").lower()
+        if saved_channel == "beta":
+            self.channel_combo.setCurrentIndex(1)
+        else:
+            self.channel_combo.setCurrentIndex(0)
+
+        self.channel_combo.currentIndexChanged.connect(self._on_channel_changed)
+
+        channel_row.addWidget(self.channel_lbl)
+        channel_row.addWidget(self.channel_combo)
+        channel_row.addStretch(1)
+        up_layout.addLayout(channel_row)
+
         self.auto_check_update_cb = CheckBox('Automatically check for updates on startup', self.update_card)
         is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
         self.auto_check_update_cb.setChecked(is_auto_check)
@@ -163,11 +183,22 @@ class SettingsPage(QWidget):
             reset_database()
             InfoBar.success('Reset Complete', 'Database has been factory reset successfully.', parent=self.window())
 
+    def _on_channel_changed(self, index):
+        channel = self.channel_combo.itemData(index) or ("beta" if index == 1 else "stable")
+        set_setting("update_channel", channel)
+        InfoBar.info(
+            "Channel Changed",
+            f"Update channel set to: {channel.capitalize()}",
+            duration=3000,
+            parent=self.window()
+        )
+
     def check_for_updates_clicked(self):
         self.check_updates_btn.setEnabled(False)
         self.check_updates_btn.setText('Checking...')
 
-        self.update_worker = UpdateCheckWorker(current_version=__version__, parent=self)
+        channel = get_setting("update_channel", "stable")
+        self.update_worker = UpdateCheckWorker(current_version=__version__, channel=channel, parent=self)
         self.update_worker.finished_check.connect(self._on_update_checked)
         self.update_worker.failed_check.connect(self._on_update_failed)
         self.update_worker.start()

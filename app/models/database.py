@@ -1,7 +1,7 @@
 import os
 import sys
 import sqlite3
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Store DB in AppData to avoid PermissionError in Program Files
@@ -13,14 +13,30 @@ db_path = os.path.join(base_dir, 'downloads.db')
 db_path_clean = db_path.replace('\\', '/')
 DATABASE_URL = f"sqlite:///{db_path_clean}"
 
-# Adding increased timeout to avoid "database is locked" errors during concurrency
-engine = create_engine(DATABASE_URL, echo=False, connect_args={'timeout': 30})
-SessionLocal = sessionmaker(bind=engine)
+# Adding increased timeout and check_same_thread=False for cross-thread QThread access
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    connect_args={'timeout': 60, 'check_same_thread': False}
+)
+
+# Enable WAL journal mode for concurrent read/write performance
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.close()
+
+# expire_on_commit=False prevents DetachedInstanceError when accessing ORM objects
+# after the session context manager exits
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 
 def _migrate_db():
     """Ensure newly added columns exist in existing SQLite databases."""
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -48,9 +64,14 @@ def _migrate_db():
                 cursor.execute("ALTER TABLE smart_rules ADD COLUMN created_at TIMESTAMP")
 
         conn.commit()
-        conn.close()
     except Exception:
         pass
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def init_db():

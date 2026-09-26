@@ -24,37 +24,37 @@ class SmartRouter:
                 if not getattr(rule, 'is_active', 1):
                     continue
 
-                cond_type = getattr(rule, 'condition_type', '')
-                cond_val = getattr(rule, 'condition_value', '').strip()
-                dest = getattr(rule, 'destination_path', '').strip()
+                cond_type = getattr(rule, 'condition_type', '') or ''
+                cond_val = (getattr(rule, 'condition_value', '') or '').strip()
+                dest = (getattr(rule, 'destination_path', '') or '').strip()
 
-                if not dest:
-                    continue
+                if not dest or not cond_val:
+                    continue  # Skip rules with empty condition or destination
 
                 # Condition: File Extension Match (.pdf, .zip, etc.)
                 if cond_type == "ext":
                     exts = [e.strip().lower() for e in cond_val.split(',')]
-                    if ext and any(ext == e or ext == f".{e.lstrip('.')}" for e in exts):
+                    if ext and any(ext == e or ext == f".{e.lstrip('.')}" for e in exts if e):
                         os.makedirs(dest, exist_ok=True)
                         return dest, getattr(rule, 'name', 'Custom Rule')
 
                 # Condition: Filename Contains
                 elif cond_type == "contains":
-                    if cond_val.lower() in fn_lower:
+                    if cond_val and cond_val.lower() in fn_lower:
                         os.makedirs(dest, exist_ok=True)
                         return dest, getattr(rule, 'name', 'Custom Rule')
 
-                # Condition: AI Semantic Category
+                # Condition: AI Semantic Category (use heuristic only to avoid UI freeze)
                 elif cond_type == "ai_category":
-                    ai_cat = AIClient.classify_category(filename, url, ext)
+                    ai_cat = AIClient._heuristic_category(filename, ext)
                     if cond_val.lower() in ai_cat.lower() or ai_cat.lower() in cond_val.lower():
                         os.makedirs(dest, exist_ok=True)
                         return dest, ai_cat
         except Exception:
             pass
 
-        # 2. Default Automatic Semantic Categorization
-        cat = AIClient.classify_category(filename, url, ext)
+        # 2. Default Automatic Semantic Categorization (heuristic-only to avoid UI freeze)
+        cat = AIClient._heuristic_category(filename, ext)
         cat_folder = os.path.join(default_dir, cat)
         try:
             os.makedirs(cat_folder, exist_ok=True)
