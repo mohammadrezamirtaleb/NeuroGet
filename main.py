@@ -128,39 +128,68 @@ class MainWindow(FluentWindow):
             dialog.exec_()
 
     def closeEvent(self, event):
-        """Gracefully shut down all background threads to prevent Qt segfaults."""
+        """Gracefully shut down all background threads without blocking the main UI thread."""
         # Cancel all active download workers in DownloadsPage
         if hasattr(self, 'downloads_interface'):
             layout = self.downloads_interface.scroll_layout
             for i in range(layout.count()):
                 widget = layout.itemAt(i).widget()
-                if widget and hasattr(widget, 'worker') and widget.worker is not None:
-                    try:
-                        widget.worker.cancel()
-                        widget.worker.wait(2000)
-                    except Exception:
-                        pass
                 if widget and hasattr(widget, 'db_timer'):
                     try:
                         widget.db_timer.stop()
                     except Exception:
                         pass
+                if widget and hasattr(widget, 'worker') and widget.worker is not None:
+                    try:
+                        widget.worker.metadata_ready.disconnect()
+                        widget.worker.progress_update.disconnect()
+                        widget.worker.finished.disconnect()
+                        widget.worker.error.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        widget.worker.cancel()
+                        widget.worker.wait(50)
+                    except Exception:
+                        pass
+                if widget and hasattr(widget, 'extract_worker') and widget.extract_worker is not None:
+                    try:
+                        widget.extract_worker.finished_extract.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        widget.extract_worker.cancel()
+                        widget.extract_worker.wait(50)
+                    except Exception:
+                        pass
 
-        # Stop update checker if running
-        if hasattr(self, '_startup_updater') and self._startup_updater.isRunning():
-            try:
-                self._startup_updater.quit()
-                self._startup_updater.wait(1000)
-            except Exception:
-                pass
+        # Stop update checkers if running
+        for updater_attr in ('_startup_updater', '_manual_updater'):
+            if hasattr(self, updater_attr):
+                updater = getattr(self, updater_attr)
+                if updater is not None and updater.isRunning():
+                    try:
+                        updater.finished_check.disconnect()
+                        updater.failed_check.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        updater.quit()
+                        updater.wait(50)
+                    except Exception:
+                        pass
 
         # Stop scanner thread if running
         if hasattr(self, 'rules_interface') and hasattr(self.rules_interface, 'scanner_thread'):
             scanner = self.rules_interface.scanner_thread
             if scanner is not None and scanner.isRunning():
                 try:
+                    scanner.finished_scan.disconnect()
+                except Exception:
+                    pass
+                try:
                     scanner.quit()
-                    scanner.wait(1000)
+                    scanner.wait(50)
                 except Exception:
                     pass
 

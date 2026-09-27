@@ -75,7 +75,9 @@ class PasswordFinder:
                     passwords.append(stripped)
 
         # 3. Deep Web Page Scraping (if referrer is given or webpage URL)
-        page_to_scrape = referrer_url or (url if not re.search(r'\.(?:zip|rar|7z|tar|gz)$', url, re.I) else None)
+        url_path = (parsed.path or "").lower()
+        is_archive_url = bool(re.search(r'\.(?:zip|rar|7z|tar|gz|bz2|xz|tgz|7z\.\d+|part\d+\.rar)$', url_path, re.I))
+        page_to_scrape = referrer_url or (None if is_archive_url else url)
         if page_to_scrape:
             page_pwds = cls.scrape_password_from_webpage(page_to_scrape)
             passwords.extend(page_pwds)
@@ -116,8 +118,8 @@ class PasswordFinder:
 
     # --- Archive Auto-Extraction Engine ---
     @classmethod
-    def extract_archive(cls, archive_path, candidate_passwords=None, output_dir=None):
-        """Extracts .zip, .tar, .gz (and .rar/.7z if tools/libs available) using candidate passwords."""
+    def extract_archive(cls, archive_path, candidate_passwords=None, output_dir=None, is_cancelled=None):
+        """Extracts .zip, .tar, .gz (and .rar/.7z if tools/libs available) safely with path traversal protection."""
         if not os.path.exists(archive_path):
             return {"success": False, "message": "Archive file not found."}
 
@@ -126,6 +128,7 @@ class PasswordFinder:
             folder_name = os.path.splitext(os.path.basename(archive_path))[0]
             output_dir = os.path.join(base_dir, folder_name)
 
+        output_dir = os.path.abspath(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         passwords_to_try = [None, ""] + (candidate_passwords or [])
         ext = os.path.splitext(archive_path)[1].lower()
@@ -133,26 +136,49 @@ class PasswordFinder:
         # 1. ZIP Archives
         if ext == '.zip':
             for pwd in passwords_to_try:
+                if is_cancelled and is_cancelled():
+                    return {"success": False, "message": "Extraction cancelled."}
+
                 try:
                     pwd_bytes = pwd.encode('utf-8') if pwd else None
                     with zipfile.ZipFile(archive_path, 'r') as zf:
+                        # Zip Slip Protection: Validate all member paths before extracting
+                        for member in zf.infolist():
+                            member_target = os.path.abspath(os.path.join(output_dir, member.filename))
+                            if not member_target.startswith(output_dir + os.sep) and member_target != output_dir:
+                                return {"success": False, "message": f"Security alert: Zip Slip directory traversal blocked ({member.filename})"}
+
                         zf.extractall(path=output_dir, pwd=pwd_bytes)
+
                     return {
                         "success": True,
                         "password_used": pwd or "(No password)",
                         "output_dir": output_dir,
                         "message": f"Successfully extracted to {output_dir}"
                     }
-                except (RuntimeError, zipfile.BadZipFile):
+                except zipfile.BadZipFile:
+                    return {"success": False, "message": "Corrupted archive or invalid ZIP format."}
+                except (RuntimeError, zipfile.error):
+                    # Incorrect password or encryption mismatch, try next password
                     continue
                 except Exception as e:
                     return {"success": False, "message": str(e)}
 
         # 2. TAR / GZ Archives
-        elif ext in ('.tar', '.gz', '.tgz', '.bz2'):
+        elif ext in ('.tar', '.gz', '.tgz', '.bz2', '.xz'):
             try:
                 with tarfile.open(archive_path, 'r:*') as tf:
-                    tf.extractall(path=output_dir)
+                    # Tar Slip Protection: Validate members against directory traversal
+                    safe_members = []
+                    for member in tf.getmembers():
+                        member_target = os.path.abspath(os.path.join(output_dir, member.name))
+                        if member_target.startswith(output_dir + os.sep) or member_target == output_dir:
+                            safe_members.append(member)
+                        else:
+                            return {"success": False, "message": f"Security alert: Tar Slip directory traversal blocked ({member.name})"}
+
+                    tf.extractall(path=output_dir, members=safe_members)
+
                 return {
                     "success": True,
                     "password_used": "(No password)",
@@ -164,12 +190,14 @@ class PasswordFinder:
 
         # 3. 7z / WinRAR CLI Fallback for .rar and .7z on Windows
         elif ext in ('.rar', '.7z'):
-            # Check for 7z executable in common paths
             seven_zip = shutil.which("7z") or (r"C:\Program Files\7-Zip\7z.exe" if os.path.exists(r"C:\Program Files\7-Zip\7z.exe") else None)
             winrar = shutil.which("winrar") or (r"C:\Program Files\WinRAR\WinRAR.exe" if os.path.exists(r"C:\Program Files\WinRAR\WinRAR.exe") else None)
 
             if seven_zip:
                 for pwd in passwords_to_try:
+                    if is_cancelled and is_cancelled():
+                        return {"success": False, "message": "Extraction cancelled."}
+
                     cmd = [seven_zip, 'x', f'-p{pwd or ""}', '-y', f'-o{output_dir}', archive_path]
                     proc = subprocess.run(cmd, capture_output=True)
                     if proc.returncode == 0:

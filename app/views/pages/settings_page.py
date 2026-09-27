@@ -31,9 +31,7 @@ class SettingsPage(QWidget):
         self.vbox.addWidget(self.gen_label)
         
         self.path_layout = QHBoxLayout()
-        default_dir = get_setting("default_download_dir", os.path.join(os.path.expanduser("~"), "Downloads"))
         self.path_input = LineEdit(self)
-        self.path_input.setText(default_dir)
         self.path_input.setReadOnly(True)
         self.path_btn = PushButton('Change Folder', self, FIF.FOLDER)
         self.path_btn.clicked.connect(self.choose_download_dir)
@@ -52,20 +50,14 @@ class SettingsPage(QWidget):
         ai_layout.setSpacing(12)
 
         self.renaming_check = CheckBox('Enable AI Clean Renaming (cleans website tags and hashes from filenames)', self.ai_card)
-        is_rename = get_setting("enable_ai_clean_renaming", "true").lower() in ("true", "1", "yes")
-        self.renaming_check.setChecked(is_rename)
         self.renaming_check.stateChanged.connect(lambda s: set_setting("enable_ai_clean_renaming", "true" if s else "false"))
         ai_layout.addWidget(self.renaming_check)
 
         self.threat_check = CheckBox('Enable Real-time Threat & Clickbait Detection (flags double extensions and disguised executables)', self.ai_card)
-        is_threat = get_setting("enable_threat_detection", "true").lower() in ("true", "1", "yes")
-        self.threat_check.setChecked(is_threat)
         self.threat_check.stateChanged.connect(lambda s: set_setting("enable_threat_detection", "true" if s else "false"))
         ai_layout.addWidget(self.threat_check)
 
         self.auto_extract_check = CheckBox('Auto-Extract Archives with Discovered Passwords upon download completion', self.ai_card)
-        is_extract = get_setting("enable_auto_extract", "false").lower() in ("true", "1", "yes")
-        self.auto_extract_check.setChecked(is_extract)
         self.auto_extract_check.stateChanged.connect(lambda s: set_setting("enable_auto_extract", "true" if s else "false"))
         ai_layout.addWidget(self.auto_extract_check)
 
@@ -79,8 +71,6 @@ class SettingsPage(QWidget):
         self.thread_lbl = StrongBodyLabel('Max Concurrent Segments per Download:', self)
         self.thread_spin = SpinBox(self)
         self.thread_spin.setRange(1, 32)
-        saved_threads = int(get_setting("max_threads", "16"))
-        self.thread_spin.setValue(saved_threads)
         self.thread_spin.valueChanged.connect(lambda v: set_setting("max_threads", str(v)))
         
         self.thread_layout.addWidget(self.thread_lbl)
@@ -113,13 +103,6 @@ class SettingsPage(QWidget):
         self.channel_combo = ComboBox(self.update_card)
         self.channel_combo.addItem("Stable (Recommended)", userData="stable")
         self.channel_combo.addItem("Beta (Early Access & Pre-releases)", userData="beta")
-        
-        saved_channel = get_setting("update_channel", "stable").lower()
-        if saved_channel == "beta":
-            self.channel_combo.setCurrentIndex(1)
-        else:
-            self.channel_combo.setCurrentIndex(0)
-
         self.channel_combo.currentIndexChanged.connect(self._on_channel_changed)
 
         channel_row.addWidget(self.channel_lbl)
@@ -128,12 +111,13 @@ class SettingsPage(QWidget):
         up_layout.addLayout(channel_row)
 
         self.auto_check_update_cb = CheckBox('Automatically check for updates on startup', self.update_card)
-        is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
-        self.auto_check_update_cb.setChecked(is_auto_check)
         self.auto_check_update_cb.stateChanged.connect(lambda s: set_setting("auto_check_updates", "true" if s else "false"))
         up_layout.addWidget(self.auto_check_update_cb)
 
         self.vbox.addWidget(self.update_card)
+        
+        # Load initial values from DB
+        self.load_settings_values()
         
         # 5. Data Management Settings
         self.data_label = StrongBodyLabel('Data Management', self)
@@ -171,6 +155,41 @@ class SettingsPage(QWidget):
             clear_download_history()
             InfoBar.success('Success', 'Download history has been cleared.', parent=self.window())
             
+    def load_settings_values(self):
+        """Syncs all settings UI controls with the current database values."""
+        default_dir = get_setting("default_download_dir", os.path.join(os.path.expanduser("~"), "Downloads"))
+        self.path_input.setText(default_dir)
+
+        is_rename = get_setting("enable_ai_clean_renaming", "true").lower() in ("true", "1", "yes")
+        self.renaming_check.blockSignals(True)
+        self.renaming_check.setChecked(is_rename)
+        self.renaming_check.blockSignals(False)
+
+        is_threat = get_setting("enable_threat_detection", "true").lower() in ("true", "1", "yes")
+        self.threat_check.blockSignals(True)
+        self.threat_check.setChecked(is_threat)
+        self.threat_check.blockSignals(False)
+
+        is_extract = get_setting("enable_auto_extract", "false").lower() in ("true", "1", "yes")
+        self.auto_extract_check.blockSignals(True)
+        self.auto_extract_check.setChecked(is_extract)
+        self.auto_extract_check.blockSignals(False)
+
+        saved_threads = int(get_setting("max_threads", "16"))
+        self.thread_spin.blockSignals(True)
+        self.thread_spin.setValue(saved_threads)
+        self.thread_spin.blockSignals(False)
+
+        saved_channel = get_setting("update_channel", "stable").lower()
+        self.channel_combo.blockSignals(True)
+        self.channel_combo.setCurrentIndex(1 if saved_channel == "beta" else 0)
+        self.channel_combo.blockSignals(False)
+
+        is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
+        self.auto_check_update_cb.blockSignals(True)
+        self.auto_check_update_cb.setChecked(is_auto_check)
+        self.auto_check_update_cb.blockSignals(False)
+
     def prompt_reset_database(self):
         w = MessageBox(
             'Reset Database',
@@ -181,6 +200,7 @@ class SettingsPage(QWidget):
         w.cancelButton.setText('Cancel')
         if w.exec():
             reset_database()
+            self.load_settings_values()
             InfoBar.success('Reset Complete', 'Database has been factory reset successfully.', parent=self.window())
 
     def _on_channel_changed(self, index):

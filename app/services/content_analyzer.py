@@ -162,7 +162,7 @@ class ContentAnalyzer:
             except Exception:
                 pass
 
-        if ext in ('.tar', '.gz', '.tgz', '.bz2'):
+        if ext in ('.tar', '.gz', '.tgz', '.bz2', '.xz'):
             try:
                 with tarfile.open(filepath, 'r:*') as tf:
                     members = tf.getmembers()

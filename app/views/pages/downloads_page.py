@@ -43,8 +43,8 @@ from app.models.database import create_task, get_all_tasks, get_setting
 class NLPromptWorker(QThread):
     resolved = pyqtSignal(dict)
 
-    def __init__(self, prompt):
-        super().__init__()
+    def __init__(self, prompt, parent=None):
+        super().__init__(parent)
         self.prompt = prompt
 
     def run(self):
@@ -200,7 +200,7 @@ class DownloadsPage(QWidget):
 
     def handle_natural_language_prompt(self, prompt_text):
         InfoBar.info("AI Assistant", "Resolving download request...", parent=self.window(), duration=2000)
-        self.nl_worker = NLPromptWorker(prompt_text)
+        self.nl_worker = NLPromptWorker(prompt_text, parent=self)
         self.nl_worker.resolved.connect(lambda res: self._on_nl_resolved(res, prompt_text))
         self.nl_worker.start()
 

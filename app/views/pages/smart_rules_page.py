@@ -24,8 +24,8 @@ class TestRouteWorker(QThread):
     __test__ = False  # Prevent pytest from collecting this as a test class
     finished_test = pyqtSignal(dict)
 
-    def __init__(self, test_input):
-        super().__init__()
+    def __init__(self, test_input, parent=None):
+        super().__init__(parent)
         self.test_input = test_input
 
     def run(self):
@@ -342,7 +342,7 @@ class SmartRulesPage(QWidget):
         self.test_btn.setEnabled(False)
         self.test_btn.setText("Evaluating...")
 
-        self.test_worker = TestRouteWorker(text)
+        self.test_worker = TestRouteWorker(text, parent=self)
         self.test_worker.finished_test.connect(self._on_route_test_finished)
         self.test_worker.start()
 

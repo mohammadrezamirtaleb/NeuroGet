@@ -87,14 +87,23 @@ class ElidedLabel(StrongBodyLabel):
 class ExtractWorker(QThread):
     finished_extract = pyqtSignal(dict)
 
-    def __init__(self, archive_path, passwords):
-        super().__init__()
+    def __init__(self, archive_path, passwords, parent=None):
+        super().__init__(parent)
         self.archive_path = archive_path
         self.passwords = passwords
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
 
     def run(self):
-        result = PasswordFinder.extract_archive(self.archive_path, self.passwords)
-        self.finished_extract.emit(result)
+        result = PasswordFinder.extract_archive(
+            self.archive_path,
+            self.passwords,
+            is_cancelled=lambda: self._is_cancelled
+        )
+        if not self._is_cancelled:
+            self.finished_extract.emit(result)
 
 
 class DownloadCard(CardWidget):
@@ -475,7 +484,7 @@ class DownloadCard(CardWidget):
         self.btnExtract.setText("Extracting...")
 
         passwords = PasswordFinder.get_probable_passwords(self.url, self.filename)
-        self.extract_worker = ExtractWorker(filepath, passwords)
+        self.extract_worker = ExtractWorker(filepath, passwords, parent=self)
         self.extract_worker.finished_extract.connect(lambda res: self._on_extract_finished(res, silent))
         self.extract_worker.start()
 
@@ -586,7 +595,7 @@ class DownloadCard(CardWidget):
             except (TypeError, RuntimeError):
                 pass
             self.worker.cancel()
-            self.worker.wait(3000)
+            self.worker.wait(150)
 
         # Also stop any running extract worker
         if hasattr(self, 'extract_worker') and self.extract_worker is not None:
@@ -594,8 +603,8 @@ class DownloadCard(CardWidget):
                 self.extract_worker.finished_extract.disconnect()
             except (TypeError, RuntimeError):
                 pass
-            self.extract_worker.quit()
-            self.extract_worker.wait(2000)
+            self.extract_worker.cancel()
+            self.extract_worker.wait(100)
 
         if self.task_id:
             update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="error")

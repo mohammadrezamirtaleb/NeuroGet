@@ -18,8 +18,8 @@ from app.services.ai_client import AIClient
 class SummaryWorker(QThread):
     finished_analysis = pyqtSignal(dict)
 
-    def __init__(self, filepath):
-        super().__init__()
+    def __init__(self, filepath, parent=None):
+        super().__init__(parent)
         self.filepath = filepath
 
     def run(self):
@@ -30,8 +30,8 @@ class SummaryWorker(QThread):
 class ChatWorker(QThread):
     response_ready = pyqtSignal(str)
 
-    def __init__(self, document_text, query):
-        super().__init__()
+    def __init__(self, document_text, query, parent=None):
+        super().__init__(parent)
         self.document_text = document_text
         self.query = query
 
@@ -52,6 +52,8 @@ class AISummaryDialog(QDialog):
         self.filename = os.path.basename(filepath)
         self.analysis_data = {}
         self.document_text = ""
+        self.worker = None
+        self.chat_worker = None
 
         self.setWindowTitle(f"NeuroGet AI - {self.filename}")
         self.resize(750, 580)
@@ -175,7 +177,7 @@ class AISummaryDialog(QDialog):
         return w
 
     def _start_analysis(self):
-        self.worker = SummaryWorker(self.filepath)
+        self.worker = SummaryWorker(self.filepath, parent=self)
         self.worker.finished_analysis.connect(self._on_analysis_finished)
         self.worker.start()
 
@@ -226,20 +228,26 @@ class AISummaryDialog(QDialog):
         if not query:
             return
 
+        if self.chat_worker is not None and self.chat_worker.isRunning():
+            return
+
         self.chat_input.clear()
+        self.chat_input.setEnabled(False)
         self.btn_send.setEnabled(False)
         self.btn_send.setText("Thinking...")
 
         current_history = self.chat_history.toPlainText()
         self.chat_history.setPlainText(f"{current_history}\nYou: {query}\nAI: Searching document...")
 
-        self.chat_worker = ChatWorker(self.document_text or self.summary_text.toPlainText(), query)
+        self.chat_worker = ChatWorker(self.document_text or self.summary_text.toPlainText(), query, parent=self)
         self.chat_worker.response_ready.connect(self._on_chat_response)
         self.chat_worker.start()
 
     def _on_chat_response(self, reply):
+        self.chat_input.setEnabled(True)
         self.btn_send.setEnabled(True)
         self.btn_send.setText("Ask AI")
+        self.chat_input.setFocus()
 
         # Replace 'Searching document...' with final reply
         text = self.chat_history.toPlainText()
@@ -248,3 +256,23 @@ class AISummaryDialog(QDialog):
         else:
             text += f"\nAI: {reply}\n"
         self.chat_history.setPlainText(text)
+
+    def closeEvent(self, event):
+        """Cleanly terminate workers and disconnect signals when modal closes."""
+        if self.worker is not None and self.worker.isRunning():
+            try:
+                self.worker.finished_analysis.disconnect()
+            except Exception:
+                pass
+            self.worker.quit()
+            self.worker.wait(100)
+
+        if self.chat_worker is not None and self.chat_worker.isRunning():
+            try:
+                self.chat_worker.response_ready.disconnect()
+            except Exception:
+                pass
+            self.chat_worker.quit()
+            self.chat_worker.wait(100)
+
+        super().closeEvent(event)

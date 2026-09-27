@@ -101,7 +101,7 @@ class UpdateService:
                     try:
                         res = requests.get(dl_url, timeout=5)
                         if res.status_code == 200:
-                            content = res.text
+                            content = res.content.decode('utf-8', errors='ignore')
                             for line in content.splitlines():
                                 if asset_name and asset_name.lower() in line.lower():
                                     h_match = re.search(r'([0-9a-fA-F]{64})', line)
@@ -333,12 +333,7 @@ class UpdateDownloadWorker(QThread):
                             last_emit_time = now
                             bytes_since_last = 0
 
-            # Atomic rename from .download to final .exe
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except Exception:
-                    pass
+            # Atomic rename from .download to final .exe (atomic on Windows/POSIX)
             os.replace(temp_path, target_path)
 
             # Check integrity if expected hash is present
