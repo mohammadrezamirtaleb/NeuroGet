@@ -148,7 +148,18 @@ def test_full_ui_suite():
         session.commit()
 
     dialog.close()
+    dialog.deleteLater()
+
+    if hasattr(window.rules_interface, 'scanner_thread') and window.rules_interface.scanner_thread:
+        try:
+            window.rules_interface.scanner_thread.quit()
+            window.rules_interface.scanner_thread.wait(500)
+        except Exception:
+            pass
+
     window.close()
+    window.deleteLater()
+    app.processEvents()
 
     print("\n=======================================================")
     print("ALL TABS, BUTTONS, MECHANISMS & WORKERS PASSED 100%!")

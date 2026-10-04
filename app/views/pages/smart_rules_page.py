@@ -484,16 +484,29 @@ class SmartRulesPage(QWidget):
 
         self.test_result_label = CaptionLabel("Results will appear here...", self.test_card)
         self.test_result_label.setWordWrap(True)
-        self.test_result_label.setStyleSheet("""
+        light_result_qss = """
             CaptionLabel {
-                background-color: rgba(128, 128, 128, 0.08);
-                border: 1px solid rgba(128, 128, 128, 0.15);
+                color: rgba(0, 0, 0, 0.85);
+                background-color: rgba(0, 0, 0, 0.04);
+                border: 1px solid rgba(0, 0, 0, 0.08);
                 border-radius: 6px;
                 padding: 10px 14px;
                 font-size: 12px;
                 line-height: 1.5;
             }
-        """)
+        """
+        dark_result_qss = """
+            CaptionLabel {
+                color: rgba(255, 255, 255, 0.90);
+                background-color: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                border-radius: 6px;
+                padding: 10px 14px;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+        """
+        setCustomStyleSheet(self.test_result_label, light_result_qss, dark_result_qss)
         t_layout.addWidget(self.test_result_label)
 
         self.vbox.addWidget(self.test_card)

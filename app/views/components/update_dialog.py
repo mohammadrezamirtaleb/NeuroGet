@@ -8,7 +8,7 @@ from PyQt5.QtGui import QDesktopServices
 from qfluentwidgets import (
     TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     PrimaryPushButton, PushButton, CardWidget, SimpleCardWidget, IconWidget,
-    ProgressBar, InfoBar, InfoBarPosition, TextEdit
+    ProgressBar, InfoBar, InfoBarPosition, TextEdit, setCustomStyleSheet
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -106,15 +106,27 @@ class UpdateDialog(QDialog):
 
         self.changelog_view = TextEdit(self.changelog_card)
         self.changelog_view.setReadOnly(True)
-        self.changelog_view.setStyleSheet("""
+        light_notes_qss = """
             TextEdit, QTextEdit {
                 font-family: 'Segoe UI', system-ui, sans-serif;
                 font-size: 13px;
                 line-height: 1.5;
                 border: none;
                 background-color: transparent;
+                color: rgba(0, 0, 0, 0.88);
             }
-        """)
+        """
+        dark_notes_qss = """
+            TextEdit, QTextEdit {
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+                border: none;
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.90);
+            }
+        """
+        setCustomStyleSheet(self.changelog_view, light_notes_qss, dark_notes_qss)
 
         raw_changelog = self.update_info.get("changelog", "").strip()
         if not raw_changelog:

@@ -11,7 +11,7 @@ from qfluentwidgets import (
     SegmentedWidget, PrimaryPushButton, PushButton, TransparentPushButton,
     PillPushButton, LineEdit, TextEdit, InfoBar, InfoBarPosition,
     CardWidget, SimpleCardWidget, IconWidget, IndeterminateProgressRing,
-    isDarkTheme, FluentIcon as FIF
+    isDarkTheme, FluentIcon as FIF, setCustomStyleSheet
 )
 
 from app.services.content_analyzer import ContentAnalyzer
@@ -252,15 +252,27 @@ class AISummaryDialog(QDialog):
         self.summary_text = TextEdit(self.summary_card)
         self.summary_text.setReadOnly(True)
         self.summary_text.setPlaceholderText("Generating AI insights...")
-        self.summary_text.setStyleSheet("""
+        light_summary_qss = """
             TextEdit, QTextEdit {
                 border: none;
                 background-color: transparent;
+                color: rgba(0, 0, 0, 0.88);
                 font-family: 'Segoe UI', system-ui, sans-serif;
                 font-size: 13px;
                 line-height: 1.6;
             }
-        """)
+        """
+        dark_summary_qss = """
+            TextEdit, QTextEdit {
+                border: none;
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.90);
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+        """
+        setCustomStyleSheet(self.summary_text, light_summary_qss, dark_summary_qss)
         self.summary_text.hide()
         card_layout.addWidget(self.summary_text, 1)
 
@@ -295,15 +307,27 @@ class AISummaryDialog(QDialog):
         # Chat History Box
         self.chat_history = TextEdit(chat_card)
         self.chat_history.setReadOnly(True)
-        self.chat_history.setStyleSheet("""
+        light_chat_qss = """
             TextEdit, QTextEdit {
                 border: none;
                 background-color: transparent;
+                color: rgba(0, 0, 0, 0.88);
                 font-family: 'Segoe UI', system-ui, sans-serif;
                 font-size: 13px;
                 line-height: 1.5;
             }
-        """)
+        """
+        dark_chat_qss = """
+            TextEdit, QTextEdit {
+                border: none;
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.90);
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """
+        setCustomStyleSheet(self.chat_history, light_chat_qss, dark_chat_qss)
         card_layout.addWidget(self.chat_history, 1)
 
         # Quick Suggestion Chips
@@ -373,15 +397,27 @@ class AISummaryDialog(QDialog):
         # Properties Text Box
         self.meta_text = TextEdit(props_card)
         self.meta_text.setReadOnly(True)
-        self.meta_text.setStyleSheet("""
+        light_meta_qss = """
             TextEdit, QTextEdit {
                 border: none;
                 background-color: transparent;
+                color: rgba(0, 0, 0, 0.88);
                 font-family: 'Consolas', 'Segoe UI Mono', monospace;
                 font-size: 12px;
                 line-height: 1.6;
             }
-        """)
+        """
+        dark_meta_qss = """
+            TextEdit, QTextEdit {
+                border: none;
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.90);
+                font-family: 'Consolas', 'Segoe UI Mono', monospace;
+                font-size: 12px;
+                line-height: 1.6;
+            }
+        """
+        setCustomStyleSheet(self.meta_text, light_meta_qss, dark_meta_qss)
         props_layout.addWidget(self.meta_text, 1)
 
         vbox.addWidget(props_card, 1)

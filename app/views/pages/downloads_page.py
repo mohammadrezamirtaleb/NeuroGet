@@ -32,7 +32,8 @@ from qfluentwidgets import (
     IconWidget,
     SegmentedWidget,
     PillPushButton,
-    SmoothMode
+    SmoothMode,
+    setCustomStyleSheet
 )
 
 from qfluentwidgets import FluentIcon as FIF
@@ -256,17 +257,30 @@ class DownloadsPage(QWidget):
         chip1 = CaptionLabel("32 Parallel Segments", self.empty_card)
         chip2 = CaptionLabel("AI Semantic Auto-Routing", self.empty_card)
         chip3 = CaptionLabel("Real-Time Threat Inspection", self.empty_card)
+        light_chip_qss = """
+            CaptionLabel {
+                color: rgba(0, 0, 0, 0.65);
+                background-color: rgba(0, 0, 0, 0.04);
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: 500;
+            }
+        """
+        dark_chip_qss = """
+            CaptionLabel {
+                color: rgba(255, 255, 255, 0.75);
+                background-color: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: 500;
+            }
+        """
         for c in (chip1, chip2, chip3):
-            c.setStyleSheet("""
-                CaptionLabel {
-                    color: #888888;
-                    background-color: rgba(255, 255, 255, 0.05);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 6px;
-                    padding: 3px 10px;
-                    font-size: 11px;
-                }
-            """)
+            setCustomStyleSheet(c, light_chip_qss, dark_chip_qss)
             tips_layout.addWidget(c)
 
         empty_layout.addLayout(tips_layout)
