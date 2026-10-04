@@ -49,6 +49,9 @@ class MainWindow(FluentWindow):
         QTimer.singleShot(2500, self.check_updates_on_startup)
 
     def initNavigation(self):
+        # Set standard compact navigation width for Windows 11 Fluent Design (200px instead of default 322px)
+        self.navigationInterface.setExpandWidth(200)
+
         self.addSubInterface(self.downloads_interface, FIF.DOWNLOAD, 'Active Tasks')
         self.addSubInterface(self.rules_interface, FIF.APPLICATION, 'Smart Rules')
         
