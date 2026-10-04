@@ -339,6 +339,40 @@ class SmartRulesPage(QWidget):
         self.table.setHorizontalHeaderLabels(['Rule Name', 'Condition Type', 'Condition Value', 'Target Directory'])
         self.table.setMinimumHeight(240)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.table.setBorderVisible(False)
+        self.table.setBorderRadius(8)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().hide()
+        self.table.setAlternatingRowColors(True)
+        self.table.setStyleSheet("""
+            QTableView {
+                background: transparent;
+                outline: none;
+                border: none;
+                selection-background-color: transparent;
+                alternate-background-color: rgba(255, 255, 255, 0.02);
+            }
+            QHeaderView {
+                background-color: transparent;
+                border: none;
+            }
+            QHeaderView::section {
+                background-color: transparent;
+                border: none;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QTableView::item {
+                border: none;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+        """)
         self.table.horizontalHeader().setMinimumSectionSize(90)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
