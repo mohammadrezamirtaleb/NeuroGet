@@ -45,7 +45,11 @@ class AddRuleDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add New Smart Rule")
-        self.resize(500, 380)
+        self.resize(520, 400)
+
+        from qfluentwidgets import isDarkTheme
+        bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
+        self.setStyleSheet(f"AddRuleDialog {{ background-color: {bg_color}; }}")
 
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(24, 20, 24, 20)
@@ -54,6 +58,7 @@ class AddRuleDialog(QDialog):
         self.vbox.addWidget(StrongBodyLabel("Rule Name:", self))
         self.name_input = LineEdit(self)
         self.name_input.setPlaceholderText("e.g. University PDF Documents")
+        self.name_input.setClearButtonEnabled(True)
         self.vbox.addWidget(self.name_input)
 
         self.vbox.addWidget(StrongBodyLabel("Condition Type:", self))
@@ -66,12 +71,14 @@ class AddRuleDialog(QDialog):
         self.vbox.addWidget(StrongBodyLabel("Condition Value:", self))
         self.val_input = LineEdit(self)
         self.val_input.setPlaceholderText("e.g. .pdf, .docx OR keyword OR Education / Course")
+        self.val_input.setClearButtonEnabled(True)
         self.vbox.addWidget(self.val_input)
 
         self.vbox.addWidget(StrongBodyLabel("Destination Folder:", self))
         self.dest_layout = QHBoxLayout()
         self.dest_input = LineEdit(self)
         self.dest_input.setPlaceholderText("Select destination directory...")
+        self.dest_input.setClearButtonEnabled(True)
         self.browse_btn = PushButton("Browse", self, FIF.FOLDER)
         self.browse_btn.clicked.connect(self._browse_dir)
         self.dest_layout.addWidget(self.dest_input, 1)

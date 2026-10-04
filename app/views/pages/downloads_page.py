@@ -18,6 +18,7 @@ from qfluentwidgets import (
     LineEdit,
     PrimaryPushButton,
     PushButton,
+    TransparentPushButton,
     TitleLabel,
     StrongBodyLabel,
     BodyLabel,
@@ -26,7 +27,10 @@ from qfluentwidgets import (
     ToolButton,
     MessageBox,
     InfoBar,
-    InfoBarPosition
+    InfoBarPosition,
+    CardWidget,
+    SimpleCardWidget,
+    IconWidget
 )
 
 from qfluentwidgets import FluentIcon as FIF
@@ -76,6 +80,7 @@ class DownloadsPage(QWidget):
         self.url_input = LineEdit(self)
         self.url_input.setPlaceholderText("Paste URL here or ask AI (e.g. 'download python 3.12 installer')...")
         self.url_input.setMinimumHeight(40)
+        self.url_input.setClearButtonEnabled(True)
         self.url_input.returnPressed.connect(self.add_download)
 
         self.add_btn = PrimaryPushButton('Download', self, FIF.DOWNLOAD)
@@ -92,6 +97,26 @@ class DownloadsPage(QWidget):
 
         self.vbox.addLayout(self.input_hlayout)
 
+        # Action Toolbar (Batch controls and task count)
+        self.toolbar_layout = QHBoxLayout()
+        self.toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        self.toolbar_layout.setSpacing(8)
+
+        self.counter_label = CaptionLabel("0 tasks in queue", self)
+        self.btn_pause_all = TransparentPushButton("Pause All", self, FIF.PAUSE)
+        self.btn_pause_all.clicked.connect(self.pause_all_downloads)
+        self.btn_resume_all = TransparentPushButton("Resume All", self, FIF.PLAY)
+        self.btn_resume_all.clicked.connect(self.resume_all_downloads)
+        self.btn_clear_completed = TransparentPushButton("Clear Completed", self, FIF.DELETE)
+        self.btn_clear_completed.clicked.connect(self.clear_completed_downloads)
+
+        self.toolbar_layout.addWidget(self.counter_label)
+        self.toolbar_layout.addStretch()
+        self.toolbar_layout.addWidget(self.btn_pause_all)
+        self.toolbar_layout.addWidget(self.btn_resume_all)
+        self.toolbar_layout.addWidget(self.btn_clear_completed)
+        self.vbox.addLayout(self.toolbar_layout)
+
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -104,6 +129,23 @@ class DownloadsPage(QWidget):
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignTop)
         self.scroll_layout.setSpacing(10)
+
+        # Empty State Card
+        self.empty_card = CardWidget(self.scroll_widget)
+        empty_layout = QVBoxLayout(self.empty_card)
+        empty_layout.setContentsMargins(24, 36, 24, 36)
+        empty_layout.setAlignment(Qt.AlignCenter)
+        empty_layout.setSpacing(10)
+
+        empty_icon = IconWidget(FIF.DOWNLOAD, self.empty_card)
+        empty_icon.setFixedSize(48, 48)
+        empty_title = StrongBodyLabel("No Active Downloads", self.empty_card)
+        empty_subtitle = CaptionLabel("Paste a download link or type a prompt above to start downloading with AI routing.", self.empty_card)
+
+        empty_layout.addWidget(empty_icon, 0, Qt.AlignCenter)
+        empty_layout.addWidget(empty_title, 0, Qt.AlignCenter)
+        empty_layout.addWidget(empty_subtitle, 0, Qt.AlignCenter)
+        self.scroll_layout.addWidget(self.empty_card)
 
         self.scroll_area.setWidget(self.scroll_widget)
         self.vbox.addWidget(self.scroll_area)
@@ -148,6 +190,57 @@ class DownloadsPage(QWidget):
 
         except Exception:
             pass
+
+        self._update_ui_counters()
+
+    def _update_ui_counters(self):
+        count = 0
+        active_count = 0
+        for i in range(self.scroll_layout.count()):
+            w = self.scroll_layout.itemAt(i).widget()
+            if isinstance(w, DownloadCard):
+                count += 1
+                if getattr(w, 'state', '') in ('downloading', 'pending'):
+                    active_count += 1
+
+        if count == 0:
+            self.empty_card.show()
+            self.counter_label.setText("0 tasks in queue")
+        else:
+            self.empty_card.hide()
+            status_text = f"{count} task{'s' if count != 1 else ''} in queue"
+            if active_count > 0:
+                status_text += f" ({active_count} active)"
+            self.counter_label.setText(status_text)
+
+    def pause_all_downloads(self):
+        for i in range(self.scroll_layout.count()):
+            w = self.scroll_layout.itemAt(i).widget()
+            if isinstance(w, DownloadCard) and getattr(w, 'state', '') == "downloading":
+                w.toggle_pause()
+        self._update_ui_counters()
+
+    def resume_all_downloads(self):
+        for i in range(self.scroll_layout.count()):
+            w = self.scroll_layout.itemAt(i).widget()
+            if isinstance(w, DownloadCard) and getattr(w, 'state', '') in ("paused", "error", "queued"):
+                w.toggle_pause()
+        self._update_ui_counters()
+
+    def clear_completed_downloads(self):
+        to_remove = []
+        for i in range(self.scroll_layout.count()):
+            w = self.scroll_layout.itemAt(i).widget()
+            if isinstance(w, DownloadCard) and getattr(w, 'state', '') == "completed":
+                to_remove.append(w)
+
+        for card in to_remove:
+            self.scroll_layout.removeWidget(card)
+            card.deleteLater()
+
+        self._update_ui_counters()
+        if to_remove:
+            InfoBar.success("Cleaned", f"Cleared {len(to_remove)} completed download tasks.", parent=self.window())
 
     def check_clipboard(self, is_startup=False):
         mime_data = self.clipboard.mimeData()
@@ -258,6 +351,7 @@ class DownloadsPage(QWidget):
         else:
             self.scroll_layout.addWidget(card)
 
+        self._update_ui_counters()
         return card
 
     def import_urls_from_file(self):

@@ -164,13 +164,34 @@ class DownloadCard(CardWidget):
 
         # Header with Name, Category Tag, Threat Badge, and Status
         self.headerLayout = QHBoxLayout()
+        self.headerLayout.setSpacing(8)
         self.nameLabel = ElidedLabel(self.filename, self)
         
-        self.categoryBadge = CaptionLabel(f"[{self.category}]", self)
-        self.categoryBadge.setStyleSheet("color: #0078D4; font-weight: bold;")
+        self.categoryBadge = CaptionLabel(f"{self.category}", self)
+        self.categoryBadge.setStyleSheet("""
+            CaptionLabel {
+                color: #0078D4;
+                background-color: rgba(0, 120, 212, 0.12);
+                border: 1px solid rgba(0, 120, 212, 0.25);
+                border-radius: 4px;
+                padding: 1px 7px;
+                font-weight: 600;
+                font-size: 11px;
+            }
+        """)
 
         self.threatBadge = CaptionLabel("", self)
-        self.threatBadge.setStyleSheet("color: #E81123; font-weight: bold;")
+        self.threatBadge.setStyleSheet("""
+            CaptionLabel {
+                color: #E81123;
+                background-color: rgba(232, 17, 35, 0.15);
+                border: 1px solid rgba(232, 17, 35, 0.3);
+                border-radius: 4px;
+                padding: 1px 7px;
+                font-weight: 600;
+                font-size: 11px;
+            }
+        """)
         self.threatBadge.hide()
 
         self.speedLabel = CaptionLabel("Connecting...", self)
