@@ -2,8 +2,8 @@ import os
 import urllib.parse
 import subprocess
 
-from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal, QThread
-from PyQt5.QtGui import QFontMetrics
+from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal, QThread, QPoint
+from PyQt5.QtGui import QFontMetrics, QDesktopServices
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
@@ -17,11 +17,15 @@ from qfluentwidgets import (
     CaptionLabel,
     ToolButton,
     CardWidget,
+    SimpleCardWidget,
     IconWidget,
     PushButton,
+    PrimaryPushButton,
     MessageBox,
     LineEdit,
-    InfoBar
+    InfoBar,
+    RoundMenu,
+    Action
 )
 
 from qfluentwidgets import FluentIcon as FIF
@@ -123,7 +127,7 @@ class DownloadCard(CardWidget):
         self.filename = urllib.parse.unquote(raw_filename)
         self.save_dir = save_dir
         self.task_id = task_id
-        self.category = category
+        self.category = category or "General"
         self.threat_level = threat_level
 
         self.state = status
@@ -141,39 +145,37 @@ class DownloadCard(CardWidget):
         if enable_renaming:
             self.filename = AIClient._heuristic_clean_name(self.filename)
 
-        self.setMinimumHeight(105)
+        self.setMinimumHeight(108)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.hBoxLayout = QHBoxLayout(self)
-        self.hBoxLayout.setContentsMargins(18, 14, 18, 14)
+        self.hBoxLayout.setContentsMargins(16, 14, 16, 14)
         self.hBoxLayout.setSpacing(14)
 
         self._update_icon()
 
-        self.iconWidget = IconWidget(self.icon_type, self)
-        self.iconWidget.setFixedSize(QSize(40, 40))
-        self.hBoxLayout.addWidget(self.iconWidget)
+        # Stylized Acrylic Icon Container
+        self.iconCard = SimpleCardWidget(self)
+        self.iconCard.setFixedSize(48, 48)
+        icon_card_layout = QVBoxLayout(self.iconCard)
+        icon_card_layout.setContentsMargins(0, 0, 0, 0)
+        icon_card_layout.setAlignment(Qt.AlignCenter)
+
+        self.iconWidget = IconWidget(self.icon_type, self.iconCard)
+        self.iconWidget.setFixedSize(QSize(28, 28))
+        icon_card_layout.addWidget(self.iconWidget, 0, Qt.AlignCenter)
+        self.hBoxLayout.addWidget(self.iconCard)
 
         self.vBoxLayout = QVBoxLayout()
-        self.vBoxLayout.setSpacing(8)
+        self.vBoxLayout.setSpacing(6)
 
-        # Header with Name, Category Tag, Threat Badge, and Status
+        # Header with Name, Category Tag, Threat Badge, and Speed
         self.headerLayout = QHBoxLayout()
         self.headerLayout.setSpacing(8)
         self.nameLabel = ElidedLabel(self.filename, self)
         
         self.categoryBadge = CaptionLabel(f"{self.category}", self)
-        self.categoryBadge.setStyleSheet("""
-            CaptionLabel {
-                color: #0078D4;
-                background-color: rgba(0, 120, 212, 0.12);
-                border: 1px solid rgba(0, 120, 212, 0.25);
-                border-radius: 4px;
-                padding: 1px 7px;
-                font-weight: 600;
-                font-size: 11px;
-            }
-        """)
+        self._style_category_badge()
 
         self.threatBadge = CaptionLabel("", self)
         self.threatBadge.setStyleSheet("""
@@ -215,32 +217,37 @@ class DownloadCard(CardWidget):
 
         # Action Buttons
         self.btnLayout = QHBoxLayout()
-        self.btnLayout.setSpacing(8)
+        self.btnLayout.setSpacing(6)
 
         # AI Summary Button (Shown when completed)
         self.btnSummary = PushButton('AI Summary', self, FIF.ROBOT)
+        self.btnSummary.setToolTip("Generate instant semantic insights and chat with this file")
         self.btnSummary.clicked.connect(self.open_ai_summary)
         self.btnSummary.hide()
 
         # Archive Extra Action Buttons
         self.btnPassword = PushButton('Password', self, FIF.VPN)
+        self.btnPassword.setToolTip("View discovered extraction passwords")
         self.btnPassword.clicked.connect(self.show_smart_passwords)
         if not self.is_archive:
             self.btnPassword.hide()
 
         self.btnExtract = PushButton('Extract', self, FIF.ZIP_FOLDER)
+        self.btnExtract.setToolTip("Auto-extract archive to destination")
         self.btnExtract.clicked.connect(self.start_auto_extract)
         self.btnExtract.hide()
 
         self.btnOpenFolder = ToolButton(FIF.FOLDER, self)
-        self.btnOpenFolder.setToolTip("Open in Folder")
+        self.btnOpenFolder.setToolTip("Open Containing Folder")
         self.btnOpenFolder.clicked.connect(self.open_folder)
         self.btnOpenFolder.hide()
 
         self.btnPause = ToolButton(FIF.PAUSE, self)
+        self.btnPause.setToolTip("Pause / Resume Download")
         self.btnPause.clicked.connect(self.toggle_pause)
 
         self.btnCancel = ToolButton(FIF.CLOSE, self)
+        self.btnCancel.setToolTip("Cancel & Remove Task")
         self.btnCancel.clicked.connect(self.cancel_download)
 
         self.btnLayout.addWidget(self.btnSummary)
@@ -251,6 +258,10 @@ class DownloadCard(CardWidget):
         self.btnLayout.addWidget(self.btnCancel)
 
         self.hBoxLayout.addLayout(self.btnLayout)
+
+        # Context menu setup
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
 
         self.worker = None
         self.db_timer = QTimer(self)
@@ -286,6 +297,41 @@ class DownloadCard(CardWidget):
             self.state = "queued"
             self.speedLabel.setText("Queued")
             self.btnPause.setEnabled(False)
+
+    def _style_category_badge(self):
+        cat = (self.category or "").lower()
+        if "doc" in cat or "pdf" in cat or "book" in cat:
+            color = "#0078D4"
+            bg = "rgba(0, 120, 212, 0.12)"
+            border = "rgba(0, 120, 212, 0.25)"
+        elif "video" in cat or "media" in cat or "music" in cat or "audio" in cat:
+            color = "#8764B8"
+            bg = "rgba(135, 100, 184, 0.12)"
+            border = "rgba(135, 100, 184, 0.25)"
+        elif "archive" in cat or "zip" in cat or "compress" in cat:
+            color = "#E36A00"
+            bg = "rgba(227, 106, 0, 0.12)"
+            border = "rgba(227, 106, 0, 0.25)"
+        elif "app" in cat or "soft" in cat or "exe" in cat or "code" in cat:
+            color = "#107C41"
+            bg = "rgba(16, 124, 65, 0.12)"
+            border = "rgba(16, 124, 65, 0.25)"
+        else:
+            color = "#008272"
+            bg = "rgba(0, 130, 114, 0.12)"
+            border = "rgba(0, 130, 114, 0.25)"
+
+        self.categoryBadge.setStyleSheet(f"""
+            CaptionLabel {{
+                color: {color};
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 4px;
+                padding: 1px 7px;
+                font-weight: 600;
+                font-size: 11px;
+            }}
+        """)
 
     def _update_icon(self):
         ext = self.filename.lower().split('.')[-1] if '.' in self.filename else ''
@@ -372,8 +418,6 @@ class DownloadCard(CardWidget):
     def on_metadata_ready(self, real_filename, total_size):
         self.total_size = total_size
         
-        # Use fast heuristic renaming on UI thread to avoid GUI freeze
-        # (AIClient.clean_filename makes synchronous HTTP calls)
         enable_renaming = get_setting("enable_ai_clean_renaming", "true").lower() in ("true", "1", "yes")
         if enable_renaming:
             self.filename = AIClient._heuristic_clean_name(real_filename)
@@ -383,6 +427,7 @@ class DownloadCard(CardWidget):
         self.nameLabel.setText(self.filename)
         self._update_icon()
         self.iconWidget.setIcon(self.icon_type)
+        self._style_category_badge()
 
         if self.is_archive:
             self.btnPassword.show()
@@ -404,7 +449,8 @@ class DownloadCard(CardWidget):
 
         down_str = format_size(downloaded)
         tot_str = format_size(self.total_size) if self.total_size > 0 else "Unknown"
-        self.sizeLabel.setText(f"{down_str} / {tot_str}")
+        pct_str = f" ({int((downloaded/self.total_size)*100)}%)" if self.total_size > 0 else ""
+        self.sizeLabel.setText(f"{down_str} / {tot_str}{pct_str}")
         self.speedLabel.setText(f"{format_size(speed)}/s")
         self.etaLabel.setText(f"{eta} left")
 
@@ -426,7 +472,7 @@ class DownloadCard(CardWidget):
 
         if self.total_size > 0:
             size_str = format_size(self.total_size)
-            self.sizeLabel.setText(f"{size_str} / {size_str}")
+            self.sizeLabel.setText(f"{size_str} / {size_str} (100%)")
 
         self.btnPause.hide()
         self.btnCancel.hide()
@@ -435,7 +481,6 @@ class DownloadCard(CardWidget):
 
         if self.is_archive:
             self.btnExtract.show()
-            # Auto extract if user enabled it in settings
             if get_setting("enable_auto_extract", "false").lower() in ("true", "1", "yes"):
                 self.start_auto_extract(silent=True)
 
@@ -563,6 +608,58 @@ class DownloadCard(CardWidget):
             except Exception:
                 subprocess.Popen(['explorer', folder])
 
+    def open_file(self):
+        filepath = self.completed_filepath or os.path.join(self.save_dir, self.filename)
+        if os.path.exists(filepath):
+            try:
+                os.startfile(filepath)
+            except Exception:
+                subprocess.Popen(['explorer', filepath])
+
+    def copy_url(self):
+        if self.url:
+            QApplication.clipboard().setText(self.url)
+            InfoBar.success('Copied', 'Download link copied to clipboard.', parent=self.window(), duration=2500)
+
+    def _show_context_menu(self, pos: QPoint):
+        menu = RoundMenu(parent=self)
+
+        if self.state == "completed":
+            act_open = Action(FIF.DOCUMENT, "Open File", triggered=self.open_file)
+            menu.addAction(act_open)
+
+            act_summary = Action(FIF.ROBOT, "AI Document Summary", triggered=self.open_ai_summary)
+            menu.addAction(act_summary)
+
+            if self.is_archive:
+                act_extract = Action(FIF.ZIP_FOLDER, "Extract Archive", triggered=self.start_auto_extract)
+                menu.addAction(act_extract)
+
+            act_folder = Action(FIF.FOLDER, "Open Containing Folder", triggered=self.open_folder)
+            menu.addAction(act_folder)
+
+        else:
+            if self.state == "downloading":
+                act_pause = Action(FIF.PAUSE, "Pause Download", triggered=self.toggle_pause)
+                menu.addAction(act_pause)
+            else:
+                act_resume = Action(FIF.PLAY, "Resume Download", triggered=self.toggle_pause)
+                menu.addAction(act_resume)
+
+        menu.addSeparator()
+        act_copy = Action(FIF.COPY, "Copy Download Link", triggered=self.copy_url)
+        menu.addAction(act_copy)
+
+        if self.is_archive:
+            act_pwd = Action(FIF.VPN, "Find Extraction Passwords", triggered=self.show_smart_passwords)
+            menu.addAction(act_pwd)
+
+        menu.addSeparator()
+        act_delete = Action(FIF.DELETE, "Cancel & Remove Task", triggered=self.cancel_download)
+        menu.addAction(act_delete)
+
+        menu.exec_(self.mapToGlobal(pos))
+
     def toggle_pause(self):
         if self.state == "downloading":
             self.state = "paused"
@@ -570,7 +667,7 @@ class DownloadCard(CardWidget):
             self.speedLabel.setText("Paused")
             self.etaLabel.setText("")
             self.btnPause.setIcon(FIF.PLAY)
-            self.db_timer.stop()  # Stop periodic DB writes while paused
+            self.db_timer.stop()
             if self.task_id:
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="paused")
 
@@ -582,7 +679,7 @@ class DownloadCard(CardWidget):
                 self.worker.resume()
                 self.speedLabel.setText("Connecting...")
                 self.btnPause.setIcon(FIF.PAUSE)
-                self.db_timer.start(5000)  # Restart periodic DB writes on resume
+                self.db_timer.start(5000)
 
             if self.task_id:
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="downloading")
@@ -605,7 +702,6 @@ class DownloadCard(CardWidget):
         if self.worker is not None:
             worker = self.worker
             self.worker = None
-            # Disconnect all signals to prevent crash when widget is deleted
             for sig in (worker.metadata_ready, worker.progress_update, worker.finished, worker.error):
                 try:
                     sig.disconnect()
@@ -619,7 +715,6 @@ class DownloadCard(CardWidget):
                 pass
             worker.wait(150)
 
-        # Also stop any running extract worker
         if hasattr(self, 'extract_worker') and self.extract_worker is not None:
             extract_worker = self.extract_worker
             self.extract_worker = None
@@ -640,4 +735,3 @@ class DownloadCard(CardWidget):
 
         self._emit_finished_once()
         self.deleteLater()
-

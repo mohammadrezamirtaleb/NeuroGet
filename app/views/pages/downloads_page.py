@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QApplication,
     QFileDialog,
-    QDialog,
     QSizePolicy
 )
 
@@ -16,6 +15,7 @@ from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
 
 from qfluentwidgets import (
     LineEdit,
+    SearchLineEdit,
     PrimaryPushButton,
     PushButton,
     TransparentPushButton,
@@ -27,19 +27,18 @@ from qfluentwidgets import (
     ToolButton,
     MessageBox,
     InfoBar,
-    InfoBarPosition,
     CardWidget,
     SimpleCardWidget,
-    IconWidget
+    IconWidget,
+    SegmentedWidget,
+    PillPushButton
 )
 
 from qfluentwidgets import FluentIcon as FIF
 
 from app.views.components.download_card import DownloadCard
-from app.views.components.update_dialog import UpdateDialog
 from app.services.router import SmartRouter
 from app.services.ai_client import AIClient
-from app.services.updater import UpdateCheckWorker
 from app.common.version import __version__, APP_NAME
 from app.models.database import create_task, get_all_tasks, get_setting
 
@@ -61,58 +60,134 @@ class DownloadsPage(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("DownloadsPage")
 
+        self.current_filter = "all"
+        self.search_query = ""
+
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(28, 20, 28, 20)
-        self.vbox.setSpacing(16)
+        self.vbox.setSpacing(14)
 
+        # 1. Header Section
+        self._build_header()
+
+        # 2. Hero Input Area
+        self._build_input_area()
+
+        # 3. Filter Tabs & Search / Batch Toolbar
+        self._build_toolbar()
+
+        # 4. Scrollable Download List
+        self._build_scroll_area()
+
+        self.batch_queue = []
+        self.active_batch_card = None
+
+        self.clipboard = QApplication.clipboard()
+        self.last_clipboard_text = ""
+        self.clipboard.dataChanged.connect(self.check_clipboard)
+
+        self.check_clipboard(is_startup=True)
+        self.load_history()
+
+    def _build_header(self):
         self.header_layout = QHBoxLayout()
         self.header_layout.setSpacing(12)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+
         self.title_label = TitleLabel('Downloads', self)
         self.title_label.setWordWrap(True)
-        self.update_btn = PushButton('Check for Updates', self, FIF.UPDATE)
-        self.update_btn.clicked.connect(self.check_for_updates)
-        self.header_layout.addWidget(self.title_label, 1)
-        self.header_layout.addWidget(self.update_btn, 0)
+
+        self.sub_title = CaptionLabel(
+            "Multi-threaded download acceleration with autonomous AI routing & threat defense",
+            self
+        )
+        self.sub_title.setWordWrap(True)
+
+        title_col.addWidget(self.title_label)
+        title_col.addWidget(self.sub_title)
+        self.header_layout.addLayout(title_col, 1)
+
+        # Quick header action
+        self.paste_file_btn = PushButton('Import Links File', self, FIF.DOCUMENT)
+        self.paste_file_btn.setToolTip("Import and batch download multiple links from a text file")
+        self.paste_file_btn.clicked.connect(self.import_urls_from_file)
+        self.header_layout.addWidget(self.paste_file_btn, 0)
+
         self.vbox.addLayout(self.header_layout)
 
-        self.input_hlayout = QHBoxLayout()
-        self.input_hlayout.setSpacing(10)
+    def _build_input_area(self):
+        self.input_card = CardWidget(self)
+        input_card_layout = QHBoxLayout(self.input_card)
+        input_card_layout.setContentsMargins(14, 10, 14, 10)
+        input_card_layout.setSpacing(10)
 
-        self.url_input = LineEdit(self)
-        self.url_input.setPlaceholderText("Paste URL here or ask AI (e.g. 'download python 3.12 installer')...")
-        self.url_input.setMinimumHeight(40)
+        # Quick AI / Download Icon
+        input_icon = IconWidget(FIF.ROBOT, self.input_card)
+        input_icon.setFixedSize(22, 22)
+        input_card_layout.addWidget(input_icon)
+
+        self.url_input = LineEdit(self.input_card)
+        self.url_input.setPlaceholderText("Paste URL (HTTP/HTTPS/FTP) or ask AI (e.g. 'download python 3.12 installer')...")
+        self.url_input.setMinimumHeight(38)
         self.url_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.url_input.setClearButtonEnabled(True)
         self.url_input.returnPressed.connect(self.add_download)
+        input_card_layout.addWidget(self.url_input, 1)
 
-        self.add_btn = PrimaryPushButton('Download', self, FIF.DOWNLOAD)
-        self.add_btn.setMinimumHeight(40)
+        # Paste Clipboard Quick Button
+        self.btn_paste_clip = ToolButton(FIF.PASTE, self.input_card)
+        self.btn_paste_clip.setToolTip("Paste from Clipboard")
+        self.btn_paste_clip.clicked.connect(self._paste_from_clipboard)
+        input_card_layout.addWidget(self.btn_paste_clip)
+
+        # Main Download Button
+        self.add_btn = PrimaryPushButton('Download', self.input_card, FIF.DOWNLOAD)
+        self.add_btn.setMinimumHeight(38)
         self.add_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.add_btn.clicked.connect(self.add_download)
+        input_card_layout.addWidget(self.add_btn)
 
-        self.paste_file_btn = PushButton('Paste from File', self, FIF.DOCUMENT)
-        self.paste_file_btn.setMinimumHeight(40)
-        self.paste_file_btn.setToolTip("Import and batch download multiple links from a text file")
-        self.paste_file_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.paste_file_btn.clicked.connect(self.import_urls_from_file)
+        self.vbox.addWidget(self.input_card)
 
-        self.input_hlayout.addWidget(self.url_input, 1)
-        self.input_hlayout.addWidget(self.add_btn, 0)
-        self.input_hlayout.addWidget(self.paste_file_btn, 0)
+    def _build_toolbar(self):
+        # Row 1: Filter Segmented Widget & Search LineEdit
+        top_filter_row = QHBoxLayout()
+        top_filter_row.setSpacing(12)
 
-        self.vbox.addLayout(self.input_hlayout)
+        self.filter_pivot = SegmentedWidget(self)
+        self.filter_pivot.addItem('all', 'All Tasks', onClick=lambda: self._set_filter('all'))
+        self.filter_pivot.addItem('downloading', 'Downloading', onClick=lambda: self._set_filter('downloading'))
+        self.filter_pivot.addItem('completed', 'Completed', onClick=lambda: self._set_filter('completed'))
+        self.filter_pivot.addItem('paused', 'Paused / Queued', onClick=lambda: self._set_filter('paused'))
+        self.filter_pivot.setCurrentItem('all')
 
-        # Action Toolbar (Batch controls and task count)
+        self.search_input = SearchLineEdit(self)
+        self.search_input.setPlaceholderText("Search tasks by name or URL...")
+        self.search_input.setFixedWidth(240)
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.textChanged.connect(self._on_search_changed)
+
+        top_filter_row.addWidget(self.filter_pivot)
+        top_filter_row.addStretch()
+        top_filter_row.addWidget(self.search_input)
+        self.vbox.addLayout(top_filter_row)
+
+        # Row 2: Queue Counter & Batch Controls
         self.toolbar_layout = QHBoxLayout()
         self.toolbar_layout.setContentsMargins(0, 0, 0, 0)
         self.toolbar_layout.setSpacing(8)
 
         self.counter_label = CaptionLabel("0 tasks in queue", self)
         self.counter_label.setWordWrap(True)
+
         self.btn_pause_all = TransparentPushButton("Pause All", self, FIF.PAUSE)
         self.btn_pause_all.clicked.connect(self.pause_all_downloads)
+
         self.btn_resume_all = TransparentPushButton("Resume All", self, FIF.PLAY)
         self.btn_resume_all.clicked.connect(self.resume_all_downloads)
+
         self.btn_clear_completed = TransparentPushButton("Clear Completed", self, FIF.DELETE)
         self.btn_clear_completed.clicked.connect(self.clear_completed_downloads)
 
@@ -123,6 +198,7 @@ class DownloadsPage(QWidget):
         self.toolbar_layout.addWidget(self.btn_clear_completed)
         self.vbox.addLayout(self.toolbar_layout)
 
+    def _build_scroll_area(self):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -136,38 +212,115 @@ class DownloadsPage(QWidget):
         self.scroll_layout.setAlignment(Qt.AlignTop)
         self.scroll_layout.setSpacing(10)
 
-        # Empty State Card
+        # Modern Elevated Empty State Card
         self.empty_card = CardWidget(self.scroll_widget)
         empty_layout = QVBoxLayout(self.empty_card)
-        empty_layout.setContentsMargins(24, 36, 24, 36)
+        empty_layout.setContentsMargins(32, 40, 32, 40)
         empty_layout.setAlignment(Qt.AlignCenter)
-        empty_layout.setSpacing(10)
+        empty_layout.setSpacing(12)
 
-        empty_icon = IconWidget(FIF.DOWNLOAD, self.empty_card)
-        empty_icon.setFixedSize(48, 48)
-        empty_title = StrongBodyLabel("No Active Downloads", self.empty_card)
+        empty_icon_card = SimpleCardWidget(self.empty_card)
+        empty_icon_card.setFixedSize(56, 56)
+        empty_icon_layout = QVBoxLayout(empty_icon_card)
+        empty_icon_layout.setContentsMargins(0, 0, 0, 0)
+        empty_icon_layout.setAlignment(Qt.AlignCenter)
+
+        empty_icon = IconWidget(FIF.DOWNLOAD, empty_icon_card)
+        empty_icon.setFixedSize(32, 32)
+        empty_icon_layout.addWidget(empty_icon, 0, Qt.AlignCenter)
+        empty_layout.addWidget(empty_icon_card, 0, Qt.AlignCenter)
+
+        empty_title = StrongBodyLabel("Ready for Downloads", self.empty_card)
         empty_title.setWordWrap(True)
-        empty_subtitle = CaptionLabel("Paste a download link or type a prompt above to start downloading with AI routing.", self.empty_card)
+        empty_layout.addWidget(empty_title, 0, Qt.AlignCenter)
+
+        empty_subtitle = CaptionLabel(
+            "Paste any download link above or type a natural language prompt for AI to find and route files automatically.",
+            self.empty_card
+        )
         empty_subtitle.setWordWrap(True)
         empty_subtitle.setAlignment(Qt.AlignCenter)
-
-        empty_layout.addWidget(empty_icon, 0, Qt.AlignCenter)
-        empty_layout.addWidget(empty_title, 0, Qt.AlignCenter)
         empty_layout.addWidget(empty_subtitle, 0, Qt.AlignCenter)
+
+        # Quick Tips / Feature Highlights
+        tips_layout = QHBoxLayout()
+        tips_layout.setSpacing(8)
+        tips_layout.setAlignment(Qt.AlignCenter)
+
+        chip1 = CaptionLabel("⚡ 32 Parallel Segments", self.empty_card)
+        chip2 = CaptionLabel("🧠 AI Semantic Auto-Routing", self.empty_card)
+        chip3 = CaptionLabel("🛡️ Real-Time Threat Inspection", self.empty_card)
+        for c in (chip1, chip2, chip3):
+            c.setStyleSheet("""
+                CaptionLabel {
+                    color: #888888;
+                    background-color: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 4px;
+                    padding: 2px 8px;
+                    font-size: 11px;
+                }
+            """)
+            tips_layout.addWidget(c)
+
+        empty_layout.addLayout(tips_layout)
         self.scroll_layout.addWidget(self.empty_card)
 
         self.scroll_area.setWidget(self.scroll_widget)
-        self.vbox.addWidget(self.scroll_area)
+        self.vbox.addWidget(self.scroll_area, 1)
 
-        self.batch_queue = []
-        self.active_batch_card = None
+    def _paste_from_clipboard(self):
+        mime = self.clipboard.mimeData()
+        if mime.hasText():
+            text = mime.text().strip()
+            if text:
+                self.url_input.setText(text)
+                self.url_input.setFocus()
 
-        self.clipboard = QApplication.clipboard()
-        self.last_clipboard_text = ""
-        self.clipboard.dataChanged.connect(self.check_clipboard)
+    def _set_filter(self, filter_name: str):
+        self.current_filter = filter_name
+        self._apply_card_filters()
 
-        self.check_clipboard(is_startup=True)
-        self.load_history()
+    def _on_search_changed(self, text: str):
+        self.search_query = text.strip().lower()
+        self._apply_card_filters()
+
+    def _apply_card_filters(self):
+        visible_count = 0
+        total_cards = 0
+
+        for i in range(self.scroll_layout.count()):
+            w = self.scroll_layout.itemAt(i).widget()
+            if isinstance(w, DownloadCard):
+                total_cards += 1
+                state = getattr(w, 'state', '').lower()
+                filename = getattr(w, 'filename', '').lower()
+                url = getattr(w, 'url', '').lower()
+
+                # 1. State filter match
+                match_state = True
+                if self.current_filter == "downloading":
+                    match_state = state in ("downloading", "pending")
+                elif self.current_filter == "completed":
+                    match_state = state == "completed"
+                elif self.current_filter == "paused":
+                    match_state = state in ("paused", "queued", "error")
+
+                # 2. Search query match
+                match_search = True
+                if self.search_query:
+                    match_search = self.search_query in filename or self.search_query in url
+
+                if match_state and match_search:
+                    w.show()
+                    visible_count += 1
+                else:
+                    w.hide()
+
+        if total_cards == 0:
+            self.empty_card.show()
+        else:
+            self.empty_card.hide()
 
     def load_history(self):
         try:
@@ -178,7 +331,6 @@ class DownloadsPage(QWidget):
                 category = getattr(task, "category", "General") or "General"
                 threat = getattr(task, "threat_level", "safe") or "safe"
 
-                # Incomplete tasks loaded from previous sessions should be paused, not auto-started
                 if status in ("pending", "downloading"):
                     status = "paused"
 
@@ -205,12 +357,16 @@ class DownloadsPage(QWidget):
     def _update_ui_counters(self):
         count = 0
         active_count = 0
+        completed_count = 0
         for i in range(self.scroll_layout.count()):
             w = self.scroll_layout.itemAt(i).widget()
             if isinstance(w, DownloadCard):
                 count += 1
-                if getattr(w, 'state', '') in ('downloading', 'pending'):
+                st = getattr(w, 'state', '')
+                if st in ('downloading', 'pending'):
                     active_count += 1
+                elif st == 'completed':
+                    completed_count += 1
 
         if count == 0:
             self.empty_card.show()
@@ -218,9 +374,16 @@ class DownloadsPage(QWidget):
         else:
             self.empty_card.hide()
             status_text = f"{count} task{'s' if count != 1 else ''} in queue"
+            details = []
             if active_count > 0:
-                status_text += f" ({active_count} active)"
+                details.append(f"{active_count} active")
+            if completed_count > 0:
+                details.append(f"{completed_count} completed")
+            if details:
+                status_text += f" ({', '.join(details)})"
             self.counter_label.setText(status_text)
+
+        self._apply_card_filters()
 
     def pause_all_downloads(self):
         for i in range(self.scroll_layout.count()):
@@ -451,38 +614,3 @@ class DownloadsPage(QWidget):
 
         elif was_batch and self.active_batch_card is None and self.batch_queue:
             self.start_next_batch()
-
-    def check_for_updates(self):
-        self.update_btn.setEnabled(False)
-        self.update_btn.setText('Checking...')
-
-        channel = get_setting("update_channel", "stable")
-        self.update_worker = UpdateCheckWorker(current_version=__version__, channel=channel, parent=self)
-        self.update_worker.finished_check.connect(self._on_update_checked)
-        self.update_worker.failed_check.connect(self._on_update_failed)
-        self.update_worker.start()
-
-    def _on_update_checked(self, info: dict):
-        self.update_btn.setEnabled(True)
-        self.update_btn.setText('Check for Updates')
-
-        if info.get("has_update"):
-            dialog = UpdateDialog(info, parent=self.window())
-            dialog.exec_()
-        else:
-            InfoBar.success(
-                'Up to Date',
-                f'{APP_NAME} is up to date (v{__version__}).',
-                parent=self.window(),
-                duration=3000
-            )
-
-    def _on_update_failed(self, error_msg: str):
-        self.update_btn.setEnabled(True)
-        self.update_btn.setText('Check for Updates')
-        InfoBar.warning(
-            'Update Check Failed',
-            f'Unable to check for updates: {error_msg}',
-            parent=self.window(),
-            duration=4000
-        )

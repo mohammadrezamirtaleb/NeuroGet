@@ -2,7 +2,7 @@ import os
 import subprocess
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget,
-    QStackedWidget, QApplication
+    QStackedWidget, QApplication, QFileDialog, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QTextCursor
@@ -45,7 +45,6 @@ class ChatWorker(QThread):
 
 class AISummaryDialog(QDialog):
     """Windows 11 Fluent modal providing AI Document/Media Summary,
-
     Interactive Mini-RAG Chat with file, and Metadata inspector.
     Designed according to Fluent Design System and UI/UX Pro Max standards.
     """
@@ -60,8 +59,8 @@ class AISummaryDialog(QDialog):
         self.chat_worker = None
 
         self.setWindowTitle(f"NeuroGet AI - {self.filename}")
-        self.resize(800, 600)
-        self.setMinimumSize(620, 460)
+        self.resize(840, 620)
+        self.setMinimumSize(640, 480)
 
         # Apply Fluent-compliant theme background
         self._apply_theme_style()
@@ -118,12 +117,12 @@ class AISummaryDialog(QDialog):
 
         # Glowing Fluent Icon Container
         self.icon_card = SimpleCardWidget(self)
-        self.icon_card.setFixedSize(44, 44)
+        self.icon_card.setFixedSize(46, 46)
         icon_layout = QVBoxLayout(self.icon_card)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setAlignment(Qt.AlignCenter)
         self.icon_widget = IconWidget(FIF.ROBOT, self.icon_card)
-        self.icon_widget.setFixedSize(24, 24)
+        self.icon_widget.setFixedSize(26, 26)
         icon_layout.addWidget(self.icon_widget)
 
         self.title_vbox = QVBoxLayout()
@@ -224,11 +223,16 @@ class AISummaryDialog(QDialog):
         # Summary Header inside Card
         sum_header = QHBoxLayout()
         sum_title = StrongBodyLabel("Executive Summary & Key Insights", self.summary_card)
+        
+        self.btn_export_summary = TransparentPushButton("Export (.md)", self.summary_card, FIF.SAVE)
+        self.btn_export_summary.clicked.connect(self._export_summary)
+
         self.btn_copy_summary = TransparentPushButton("Copy Summary", self.summary_card, FIF.COPY)
         self.btn_copy_summary.clicked.connect(self._copy_summary_to_clipboard)
 
         sum_header.addWidget(sum_title)
         sum_header.addStretch()
+        sum_header.addWidget(self.btn_export_summary)
         sum_header.addWidget(self.btn_copy_summary)
         card_layout.addLayout(sum_header)
 
@@ -541,6 +545,28 @@ class AISummaryDialog(QDialog):
             """
         self.chat_history.setHtml(updated_html)
         self.chat_history.moveCursor(QTextCursor.End)
+
+    def _export_summary(self):
+        text = self.summary_text.toPlainText()
+        if not text:
+            InfoBar.warning("Empty", "No summary available to export.", parent=self)
+            return
+
+        default_name = f"{os.path.splitext(self.filename)[0]}_Summary.md"
+        save_file, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export AI Summary",
+            default_name,
+            "Markdown Files (*.md);;Text Files (*.txt);;All Files (*)"
+        )
+        if save_file:
+            try:
+                with open(save_file, "w", encoding="utf-8") as f:
+                    f.write(f"# NeuroGet AI Summary: {self.filename}\n\n")
+                    f.write(text)
+                InfoBar.success("Exported", f"Summary exported successfully to:\n{save_file}", parent=self)
+            except Exception as e:
+                InfoBar.error("Export Failed", str(e), parent=self)
 
     def _copy_summary_to_clipboard(self):
         text = self.summary_text.toPlainText()

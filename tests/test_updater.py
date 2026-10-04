@@ -78,6 +78,8 @@ def test_update_dialog_ui():
     assert hasattr(dialog, "btn_download")
     assert hasattr(dialog, "progress_bar")
     assert hasattr(dialog, "btn_install_now")
+    dialog.close()
+    dialog.deleteLater()
 
 
 def test_settings_page_update_integration():
@@ -92,6 +94,8 @@ def test_settings_page_update_integration():
     assert get_setting("auto_check_updates") == "false"
     sp.auto_check_update_cb.setChecked(True)
     assert get_setting("auto_check_updates") == "true"
+    sp.close()
+    sp.deleteLater()
 
 
 def test_checksum_extraction_from_release():
