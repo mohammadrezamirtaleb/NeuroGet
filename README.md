@@ -143,7 +143,7 @@ graph TD
 ├── 📂 app/
 │   ├── 📂 common/                  # Version definitions and global constants
 │   │   ├── 📄 __init__.py
-│   │   └── 📄 version.py           # v1.0.1 metadata & GitHub endpoints
+│   │   └── 📄 version.py           # v1.2.0 metadata & GitHub endpoints
 │   ├── 📂 models/                  # Database models & SQLite storage
 │   │   ├── 📄 database.py          # SQLAlchemy ORM session & queries
 │   │   └── 📄 schemas.py           # DownloadTask, SmartRule, AppSetting
