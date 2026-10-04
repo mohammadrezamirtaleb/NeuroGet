@@ -214,7 +214,7 @@ if __name__ == '__main__':
     setTheme(Theme.DARK)
     
     # Show Custom Splash Screen First
-    splash = NeuroSplashScreen(resource_path('assets/logo.jpg'))
+    splash = NeuroSplashScreen(resource_path('assets/logo_transparent.png'))
     
     # Main Window (hidden initially)
     w = MainWindow()
