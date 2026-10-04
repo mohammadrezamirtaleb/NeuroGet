@@ -20,6 +20,7 @@ from app.views.components.update_dialog import UpdateDialog
 from app.views.pages.downloads_page import DownloadsPage
 from app.views.pages.smart_rules_page import SmartRulesPage
 from app.views.pages.settings_page import SettingsPage
+from app.views.pages.about_page import AboutPage
 from app.views.splash_screen import NeuroSplashScreen
 
 def resource_path(relative_path):
@@ -40,6 +41,7 @@ class MainWindow(FluentWindow):
         self.downloads_interface = DownloadsPage(self)
         self.rules_interface = SmartRulesPage(self)
         self.settings_interface = SettingsPage(self)
+        self.about_interface = AboutPage(self)
 
         self.initNavigation()
 
@@ -51,6 +53,7 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.rules_interface, FIF.APPLICATION, 'Smart Rules')
         
         self.navigationInterface.addSeparator()
+        self.addSubInterface(self.about_interface, FIF.INFO, 'About Us', NavigationItemPosition.BOTTOM)
         self.addSubInterface(self.settings_interface, FIF.SETTING, 'Settings', NavigationItemPosition.BOTTOM)
         
         self.navigationInterface.addItem(

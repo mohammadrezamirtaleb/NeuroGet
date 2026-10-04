@@ -20,6 +20,7 @@ from app.models.database import init_db, get_setting, set_setting, create_rule, 
 from app.views.pages.downloads_page import DownloadsPage, NLPromptWorker
 from app.views.pages.smart_rules_page import SmartRulesPage, TestRouteWorker
 from app.views.pages.settings_page import SettingsPage
+from app.views.pages.about_page import AboutPage
 from app.views.components.download_card import DownloadCard
 from app.views.components.ai_summary_dialog import AISummaryDialog, SummaryWorker, ChatWorker
 from app.services.ai_client import AIClient
@@ -37,7 +38,9 @@ def test_full_ui_suite():
     assert window.downloads_interface is not None, "DownloadsPage missing"
     assert window.rules_interface is not None, "SmartRulesPage missing"
     assert window.settings_interface is not None, "SettingsPage missing"
-    print("[PASS] MainWindow & Interfaces created")
+    assert window.about_interface is not None, "AboutPage missing"
+    assert isinstance(window.about_interface, AboutPage), "Invalid AboutPage instance"
+    print("[PASS] MainWindow & Interfaces (including AboutPage) created")
 
     print("\n--- 3. Testing Theme Toggling ---")
     initial_theme = window.toggle_theme()
@@ -134,6 +137,7 @@ def test_full_ui_suite():
         assert hasattr(window.rules_interface, "scroll_area") and window.rules_interface.scroll_area is not None
         assert hasattr(window.downloads_interface, "scroll_area") and window.downloads_interface.scroll_area is not None
         assert hasattr(window.settings_interface, "scroll_area") and window.settings_interface.scroll_area is not None
+        assert hasattr(window.about_interface, "scroll_area") and window.about_interface.scroll_area is not None
     print("[PASS] Responsive Screen Adaptation & Scroll Areas OK")
 
     # Clean up test tasks created during test

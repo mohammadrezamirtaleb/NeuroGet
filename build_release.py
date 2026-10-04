@@ -73,6 +73,7 @@ def build():
         "--hidden-import=app.views.pages.downloads_page",
         "--hidden-import=app.views.pages.smart_rules_page",
         "--hidden-import=app.views.pages.settings_page",
+        "--hidden-import=app.views.pages.about_page",
         "--hidden-import=app.views.components.download_card",
         "--hidden-import=app.views.components.ai_summary_dialog",
         "--hidden-import=app.views.components.update_dialog",
