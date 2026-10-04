@@ -37,6 +37,25 @@ class MainWindow(FluentWindow):
 
         self.initWindow()
 
+        # Remove default borders and divider lines
+        self.stackedWidget.setStyleSheet("StackedWidget { border: none; background: transparent; }")
+        self.navigationInterface.setStyleSheet("NavigationInterface { border: none; background: transparent; }")
+        self.navigationInterface.panel.setStyleSheet("""
+            NavigationPanel {
+                border: none;
+            }
+            NavigationPanel[menu=true] {
+                background-color: rgb(32, 32, 32);
+                border: none;
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+            }
+            NavigationPanel[menu=false] {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+
         # Create Pages
         self.downloads_interface = DownloadsPage(self)
         self.rules_interface = SmartRulesPage(self)
@@ -55,7 +74,6 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.downloads_interface, FIF.DOWNLOAD, 'Active Tasks')
         self.addSubInterface(self.rules_interface, FIF.APPLICATION, 'Smart Rules')
         
-        self.navigationInterface.addSeparator()
         self.addSubInterface(self.about_interface, FIF.INFO, 'About Us', NavigationItemPosition.BOTTOM)
         self.addSubInterface(self.settings_interface, FIF.SETTING, 'Settings', NavigationItemPosition.BOTTOM)
         
