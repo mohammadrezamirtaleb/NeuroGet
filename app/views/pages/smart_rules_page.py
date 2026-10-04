@@ -289,7 +289,7 @@ class SmartRulesPage(QWidget):
             self.scan_btn.setText('Scanning...')
         self._silent_scan = silent
 
-        self.scanner_thread = ScannerWorker()
+        self.scanner_thread = ScannerWorker(parent=self)
         self.scanner_thread.finished_scan.connect(self.on_scan_finished)
         self.scanner_thread.start()
 

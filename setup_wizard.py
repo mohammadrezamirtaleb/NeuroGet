@@ -166,7 +166,7 @@ class SetupWizard(QWidget):
         if self.btn.text() == "Install":
             self.btn.setEnabled(False)
             self.btn.setText("Installing...")
-            self.worker = InstallWorker()
+            self.worker = InstallWorker(parent=self)
             self.worker.progress.connect(self.update_progress)
             self.worker.finished.connect(self.install_finished)
             self.worker.start()

@@ -310,7 +310,8 @@ class DownloadCard(CardWidget):
         self.worker = DownloadWorker(
             self.task_id,
             self.url,
-            self.save_dir
+            self.save_dir,
+            parent=self
         )
         self.worker.metadata_ready.connect(self.on_metadata_ready)
         self.worker.progress_update.connect(self.on_progress)

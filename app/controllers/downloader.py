@@ -29,8 +29,8 @@ class DownloadWorker(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, task_id, url, save_dir):
-        super().__init__()
+    def __init__(self, task_id, url, save_dir, parent=None):
+        super().__init__(parent)
 
         self.task_id = task_id
         self.url = url
