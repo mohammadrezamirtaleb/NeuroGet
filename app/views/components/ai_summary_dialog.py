@@ -312,11 +312,11 @@ class AISummaryDialog(QDialog):
         chip_label = CaptionLabel("Suggestions:", chat_card)
         chips_layout.addWidget(chip_label)
 
-        self.chip1 = PillPushButton("💡 Summarize main points", chat_card)
+        self.chip1 = PillPushButton("Summarize main points", chat_card)
         self.chip1.clicked.connect(lambda: self._apply_prompt_chip("Summarize the main points of this document."))
-        self.chip2 = PillPushButton("💡 Key takeaways & conclusions", chat_card)
+        self.chip2 = PillPushButton("Key takeaways & conclusions", chat_card)
         self.chip2.clicked.connect(lambda: self._apply_prompt_chip("What are the key takeaways and conclusions?"))
-        self.chip3 = PillPushButton("💡 Extract action items & numbers", chat_card)
+        self.chip3 = PillPushButton("Extract action items & numbers", chat_card)
         self.chip3.clicked.connect(lambda: self._apply_prompt_chip("Extract all action items, dates, and important metrics."))
 
         chips_layout.addWidget(self.chip1)
@@ -468,7 +468,7 @@ class AISummaryDialog(QDialog):
         welcome_html = f"""
         <div style='color: {text_color}; font-family: Segoe UI, sans-serif; font-size: 13px;'>
             <div style='background: {tag_bg}; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;'>
-                <b style='color: #0099ff;'>🤖 NeuroGet AI Assistant:</b><br/>
+                <b style='color: #0099ff;'>NeuroGet AI Assistant:</b><br/>
                 <span style='color: {desc_color};'>I have indexed the contents of <b>{self.filename}</b>. Feel free to ask questions, request bulleted summaries, or query specific details from the document.</span>
             </div>
         </div>
@@ -502,11 +502,11 @@ class AISummaryDialog(QDialog):
         new_bubbles = f"""
         <div style='margin-bottom: 10px; font-family: Segoe UI, sans-serif; color: {text_color};'>
             <div style='background: {user_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; text-align: left;'>
-                <b style='color: #0099ff;'>👤 You:</b><br/>
+                <b style='color: #0099ff;'>You:</b><br/>
                 {query}
             </div>
             <div id='ai-thinking' style='background: {ai_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px;'>
-                <b style='color: #2bba68;'>🤖 AI:</b><br/>
+                <b style='color: #2bba68;'>AI:</b><br/>
                 <i>Searching document and generating answer...</i>
             </div>
         </div>
@@ -539,7 +539,7 @@ class AISummaryDialog(QDialog):
             text_color = "#ffffff" if dark else "#1f1f1f"
             updated_html = current_html + f"""
             <div style='background: {ai_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-family: Segoe UI, sans-serif; color: {text_color};'>
-                <b style='color: #2bba68;'>🤖 AI:</b><br/>
+                <b style='color: #2bba68;'>AI:</b><br/>
                 {formatted_reply}
             </div>
             """

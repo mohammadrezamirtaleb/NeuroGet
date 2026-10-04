@@ -92,7 +92,7 @@ class UpdateDialog(QDialog):
 
         expected_hash = self.update_info.get("expected_hash", "")
         if expected_hash:
-            self.hash_badge = CaptionLabel("🔒 SHA-256 Verified Source", self)
+            self.hash_badge = CaptionLabel("SHA-256 Verified Source", self)
             self.hash_badge.setStyleSheet("color: #107C41; font-weight: bold;")
             self.notes_header_layout.addWidget(self.hash_badge)
 
@@ -245,7 +245,7 @@ class UpdateDialog(QDialog):
 
         # Switch UI to Ready to Install State
         self.progress_bar.setValue(100)
-        self.progress_label.setText("✅ Update package verified and ready for installation!")
+        self.progress_label.setText("Update package verified and ready for installation!")
         self.progress_speed_lbl.setText("")
         self.progress_eta_lbl.setText("")
 

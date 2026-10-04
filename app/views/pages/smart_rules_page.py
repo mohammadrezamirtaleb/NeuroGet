@@ -231,6 +231,7 @@ class SmartRulesPage(QWidget):
 
     def _build_provider_card(self):
         self.provider_card = CardWidget(self.scroll_widget)
+        self.provider_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         p_card_layout = QVBoxLayout(self.provider_card)
         p_card_layout.setContentsMargins(20, 18, 20, 18)
         p_card_layout.setSpacing(12)
@@ -257,13 +258,15 @@ class SmartRulesPage(QWidget):
         header.addWidget(self.provider_status_badge)
         p_card_layout.addLayout(header)
 
-        p_controls_layout = QHBoxLayout()
-        p_controls_layout.setSpacing(10)
-
+        # Row 1: Model Selection ComboBox (Full Width)
         self.model_combo = ComboBox(self.provider_card)
         self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.model_combo.setMinimumWidth(200)
         self.model_combo.currentIndexChanged.connect(self._on_provider_changed)
+        p_card_layout.addWidget(self.model_combo)
+
+        # Row 2: Action Buttons (Responsive Layout)
+        p_buttons_layout = QHBoxLayout()
+        p_buttons_layout.setSpacing(10)
 
         self.connect_btn = PushButton('Connect API Key', self.provider_card, FIF.LINK)
         self.connect_btn.clicked.connect(self.show_api_dialog)
@@ -271,26 +274,36 @@ class SmartRulesPage(QWidget):
         self.scan_btn = PrimaryPushButton('Scan Local AI', self.provider_card, FIF.SEARCH)
         self.scan_btn.clicked.connect(self.start_scan)
 
-        p_controls_layout.addWidget(self.model_combo, 1)
-        p_controls_layout.addWidget(self.connect_btn, 0)
-        p_controls_layout.addWidget(self.scan_btn, 0)
-        p_card_layout.addLayout(p_controls_layout)
+        p_buttons_layout.addStretch()
+        p_buttons_layout.addWidget(self.connect_btn)
+        p_buttons_layout.addWidget(self.scan_btn)
+        p_card_layout.addLayout(p_buttons_layout)
 
         self.vbox.addWidget(self.provider_card)
 
     def _build_rules_section(self):
-        self.table_header_layout = QHBoxLayout()
-        self.table_header_layout.setSpacing(10)
+        self.table_section = QVBoxLayout()
+        self.table_section.setSpacing(10)
 
+        # Top row: Section Title + Search
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
         self.table_label = StrongBodyLabel('Active Auto-Routing Rules', self)
-        self.table_header_layout.addWidget(self.table_label)
-        self.table_header_layout.addStretch()
+        top_row.addWidget(self.table_label)
+        top_row.addStretch()
 
         self.rule_search = SearchLineEdit(self.scroll_widget)
         self.rule_search.setPlaceholderText("Filter rules...")
-        self.rule_search.setFixedWidth(180)
+        self.rule_search.setMinimumWidth(140)
+        self.rule_search.setMaximumWidth(220)
+        self.rule_search.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.rule_search.textChanged.connect(self._filter_rules_table)
-        self.table_header_layout.addWidget(self.rule_search)
+        top_row.addWidget(self.rule_search)
+        self.table_section.addLayout(top_row)
+
+        # Action button toolbar row
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
 
         self.restore_btn = PushButton('Restore Defaults', self, FIF.SYNC)
         self.restore_btn.setToolTip("Restore standard category routing presets")
@@ -302,25 +315,32 @@ class SmartRulesPage(QWidget):
         self.del_rule_btn = PushButton('Delete Selected', self, FIF.DELETE)
         self.del_rule_btn.clicked.connect(self.delete_selected_rule)
 
-        self.table_header_layout.addWidget(self.restore_btn)
-        self.table_header_layout.addWidget(self.add_rule_btn)
-        self.table_header_layout.addWidget(self.del_rule_btn)
-        self.vbox.addLayout(self.table_header_layout)
+        action_row.addStretch()
+        action_row.addWidget(self.restore_btn)
+        action_row.addWidget(self.del_rule_btn)
+        action_row.addWidget(self.add_rule_btn)
+        self.table_section.addLayout(action_row)
 
         self.table = TableWidget(self.scroll_widget)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Rule Name', 'Condition Type', 'Condition Value', 'Target Directory'])
         self.table.setMinimumHeight(200)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.table.horizontalHeader().setMinimumSectionSize(90)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setMinimumSectionSize(80)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.vbox.addWidget(self.table)
+        self.table.setColumnWidth(0, 160)
+        self.table.setColumnWidth(1, 130)
+        self.table.setColumnWidth(2, 160)
+        self.table_section.addWidget(self.table)
+
+        self.vbox.addLayout(self.table_section)
 
     def _build_tester_card(self):
         self.test_card = CardWidget(self.scroll_widget)
+        self.test_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         t_layout = QVBoxLayout(self.test_card)
         t_layout.setContentsMargins(20, 18, 20, 18)
         t_layout.setSpacing(10)
@@ -333,17 +353,17 @@ class SmartRulesPage(QWidget):
         )
         t_layout.addLayout(header)
 
-        # Quick Example Chips
+        # Quick Example Chips (NO EMOJIS)
         chips_layout = QHBoxLayout()
         chips_layout.setSpacing(8)
         chips_lbl = CaptionLabel("Try example:", self.test_card)
         chips_layout.addWidget(chips_lbl)
 
-        p1 = PillPushButton("📄 Research_Paper.pdf", self.test_card)
+        p1 = PillPushButton("Research_Paper.pdf", self.test_card)
         p1.clicked.connect(lambda: self._set_test_input("Deep_Learning_Survey_2026.pdf"))
-        p2 = PillPushButton("🎬 Inception_1080p.mkv", self.test_card)
+        p2 = PillPushButton("Inception_1080p.mkv", self.test_card)
         p2.clicked.connect(lambda: self._set_test_input("Inception_Movie_1080p_BluRay.mkv"))
-        p3 = PillPushButton("📦 Dataset.tar.gz", self.test_card)
+        p3 = PillPushButton("Dataset.tar.gz", self.test_card)
         p3.clicked.connect(lambda: self._set_test_input("ImageNet_Training_Archive.tar.gz"))
 
         chips_layout.addWidget(p1)
@@ -360,6 +380,8 @@ class SmartRulesPage(QWidget):
         self.test_input.returnPressed.connect(self.run_route_test)
 
         self.test_btn = PrimaryPushButton('Simulate Routing', self.test_card, FIF.PLAY)
+        self.test_btn.setMinimumWidth(150)
+        self.test_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.test_btn.clicked.connect(self.run_route_test)
 
         test_input_layout.addWidget(self.test_input, 1)

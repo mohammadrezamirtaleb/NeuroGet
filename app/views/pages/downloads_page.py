@@ -165,13 +165,14 @@ class DownloadsPage(QWidget):
 
         self.search_input = SearchLineEdit(self)
         self.search_input.setPlaceholderText("Search tasks by name or URL...")
-        self.search_input.setFixedWidth(240)
+        self.search_input.setMinimumWidth(140)
+        self.search_input.setMaximumWidth(260)
+        self.search_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._on_search_changed)
 
-        top_filter_row.addWidget(self.filter_pivot)
-        top_filter_row.addStretch()
-        top_filter_row.addWidget(self.search_input)
+        top_filter_row.addWidget(self.filter_pivot, 1)
+        top_filter_row.addWidget(self.search_input, 0)
         self.vbox.addLayout(top_filter_row)
 
         # Row 2: Queue Counter & Batch Controls
@@ -214,8 +215,9 @@ class DownloadsPage(QWidget):
 
         # Modern Elevated Empty State Card
         self.empty_card = CardWidget(self.scroll_widget)
+        self.empty_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         empty_layout = QVBoxLayout(self.empty_card)
-        empty_layout.setContentsMargins(32, 40, 32, 40)
+        empty_layout.setContentsMargins(24, 36, 24, 36)
         empty_layout.setAlignment(Qt.AlignCenter)
         empty_layout.setSpacing(12)
 
@@ -240,6 +242,7 @@ class DownloadsPage(QWidget):
         )
         empty_subtitle.setWordWrap(True)
         empty_subtitle.setAlignment(Qt.AlignCenter)
+        empty_subtitle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         empty_layout.addWidget(empty_subtitle, 0, Qt.AlignCenter)
 
         # Quick Tips / Feature Highlights
@@ -247,9 +250,9 @@ class DownloadsPage(QWidget):
         tips_layout.setSpacing(8)
         tips_layout.setAlignment(Qt.AlignCenter)
 
-        chip1 = CaptionLabel("⚡ 32 Parallel Segments", self.empty_card)
-        chip2 = CaptionLabel("🧠 AI Semantic Auto-Routing", self.empty_card)
-        chip3 = CaptionLabel("🛡️ Real-Time Threat Inspection", self.empty_card)
+        chip1 = CaptionLabel("32 Parallel Segments", self.empty_card)
+        chip2 = CaptionLabel("AI Semantic Auto-Routing", self.empty_card)
+        chip3 = CaptionLabel("Real-Time Threat Inspection", self.empty_card)
         for c in (chip1, chip2, chip3):
             c.setStyleSheet("""
                 CaptionLabel {
