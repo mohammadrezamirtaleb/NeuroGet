@@ -145,33 +145,33 @@ class DownloadCard(CardWidget):
         if enable_renaming:
             self.filename = AIClient._heuristic_clean_name(self.filename)
 
-        self.setMinimumHeight(108)
+        self.setMinimumHeight(114)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.hBoxLayout = QHBoxLayout(self)
-        self.hBoxLayout.setContentsMargins(16, 14, 16, 14)
-        self.hBoxLayout.setSpacing(14)
+        self.hBoxLayout.setContentsMargins(20, 16, 20, 16)
+        self.hBoxLayout.setSpacing(16)
 
         self._update_icon()
 
         # Stylized Acrylic Icon Container
         self.iconCard = SimpleCardWidget(self)
-        self.iconCard.setFixedSize(48, 48)
+        self.iconCard.setFixedSize(52, 52)
         icon_card_layout = QVBoxLayout(self.iconCard)
         icon_card_layout.setContentsMargins(0, 0, 0, 0)
         icon_card_layout.setAlignment(Qt.AlignCenter)
 
         self.iconWidget = IconWidget(self.icon_type, self.iconCard)
-        self.iconWidget.setFixedSize(QSize(28, 28))
+        self.iconWidget.setFixedSize(QSize(30, 30))
         icon_card_layout.addWidget(self.iconWidget, 0, Qt.AlignCenter)
         self.hBoxLayout.addWidget(self.iconCard)
 
         self.vBoxLayout = QVBoxLayout()
-        self.vBoxLayout.setSpacing(6)
+        self.vBoxLayout.setSpacing(8)
 
         # Header with Name, Category Tag, Threat Badge, and Speed
         self.headerLayout = QHBoxLayout()
-        self.headerLayout.setSpacing(8)
+        self.headerLayout.setSpacing(10)
         self.nameLabel = ElidedLabel(self.filename, self)
         
         self.categoryBadge = CaptionLabel(f"{self.category}", self)
@@ -183,8 +183,8 @@ class DownloadCard(CardWidget):
                 color: #E81123;
                 background-color: rgba(232, 17, 35, 0.15);
                 border: 1px solid rgba(232, 17, 35, 0.3);
-                border-radius: 4px;
-                padding: 1px 7px;
+                border-radius: 5px;
+                padding: 2px 8px;
                 font-weight: 600;
                 font-size: 11px;
             }
@@ -217,22 +217,25 @@ class DownloadCard(CardWidget):
 
         # Action Buttons
         self.btnLayout = QHBoxLayout()
-        self.btnLayout.setSpacing(6)
+        self.btnLayout.setSpacing(8)
 
         # AI Summary Button (Shown when completed)
         self.btnSummary = PushButton('AI Summary', self, FIF.ROBOT)
+        self.btnSummary.setMinimumHeight(32)
         self.btnSummary.setToolTip("Generate instant semantic insights and chat with this file")
         self.btnSummary.clicked.connect(self.open_ai_summary)
         self.btnSummary.hide()
 
         # Archive Extra Action Buttons
         self.btnPassword = PushButton('Password', self, FIF.VPN)
+        self.btnPassword.setMinimumHeight(32)
         self.btnPassword.setToolTip("View discovered extraction passwords")
         self.btnPassword.clicked.connect(self.show_smart_passwords)
         if not self.is_archive:
             self.btnPassword.hide()
 
         self.btnExtract = PushButton('Extract', self, FIF.ZIP_FOLDER)
+        self.btnExtract.setMinimumHeight(32)
         self.btnExtract.setToolTip("Auto-extract archive to destination")
         self.btnExtract.clicked.connect(self.start_auto_extract)
         self.btnExtract.hide()
@@ -326,8 +329,8 @@ class DownloadCard(CardWidget):
                 color: {color};
                 background-color: {bg};
                 border: 1px solid {border};
-                border-radius: 4px;
-                padding: 1px 7px;
+                border-radius: 5px;
+                padding: 2px 8px;
                 font-weight: 600;
                 font-size: 11px;
             }}

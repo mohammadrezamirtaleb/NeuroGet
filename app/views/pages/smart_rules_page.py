@@ -46,20 +46,21 @@ class AddRuleDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add New Smart Rule")
-        self.setMinimumSize(480, 380)
-        self.resize(520, 420)
+        self.setMinimumSize(520, 440)
+        self.resize(560, 460)
 
         from qfluentwidgets import isDarkTheme
         bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
         self.setStyleSheet(f"AddRuleDialog {{ background-color: {bg_color}; }}")
 
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(24, 20, 24, 20)
-        self.vbox.setSpacing(14)
+        self.vbox.setContentsMargins(28, 24, 28, 24)
+        self.vbox.setSpacing(16)
 
         self.vbox.addWidget(StrongBodyLabel("Rule Name:", self))
         self.name_input = LineEdit(self)
         self.name_input.setPlaceholderText("e.g. University PDF Documents")
+        self.name_input.setMinimumHeight(36)
         self.name_input.setClearButtonEnabled(True)
         self.vbox.addWidget(self.name_input)
 
@@ -68,31 +69,37 @@ class AddRuleDialog(QDialog):
         self.type_combo.addItem("File Extension Match (.ext)", userData="ext")
         self.type_combo.addItem("Filename Contains Keyword", userData="contains")
         self.type_combo.addItem("AI Semantic Category", userData="ai_category")
+        self.type_combo.setMinimumHeight(36)
         self.vbox.addWidget(self.type_combo)
 
         self.vbox.addWidget(StrongBodyLabel("Condition Value:", self))
         self.val_input = LineEdit(self)
         self.val_input.setPlaceholderText("e.g. .pdf, .docx OR keyword OR Education / Course")
+        self.val_input.setMinimumHeight(36)
         self.val_input.setClearButtonEnabled(True)
         self.vbox.addWidget(self.val_input)
 
         self.vbox.addWidget(StrongBodyLabel("Destination Folder:", self))
         self.dest_layout = QHBoxLayout()
-        self.dest_layout.setSpacing(8)
+        self.dest_layout.setSpacing(10)
         self.dest_input = LineEdit(self)
         self.dest_input.setPlaceholderText("Select destination directory...")
+        self.dest_input.setMinimumHeight(36)
         self.dest_input.setClearButtonEnabled(True)
         self.browse_btn = PushButton("Browse", self, FIF.FOLDER)
+        self.browse_btn.setMinimumHeight(36)
         self.browse_btn.clicked.connect(self._browse_dir)
         self.dest_layout.addWidget(self.dest_input, 1)
         self.dest_layout.addWidget(self.browse_btn)
         self.vbox.addLayout(self.dest_layout)
 
         self.btn_layout = QHBoxLayout()
-        self.btn_layout.setSpacing(8)
+        self.btn_layout.setSpacing(10)
         self.save_btn = PrimaryPushButton("Save Rule", self, FIF.SAVE)
+        self.save_btn.setMinimumHeight(36)
         self.save_btn.clicked.connect(self._validate_and_save)
         self.cancel_btn = PushButton("Cancel", self)
+        self.cancel_btn.setMinimumHeight(36)
         self.cancel_btn.clicked.connect(self.reject)
         self.btn_layout.addStretch()
         self.btn_layout.addWidget(self.cancel_btn)
@@ -129,8 +136,8 @@ class SmartRulesPage(QWidget):
         self.scanner_thread = None
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(28, 20, 28, 20)
-        self.main_layout.setSpacing(14)
+        self.main_layout.setContentsMargins(32, 24, 32, 24)
+        self.main_layout.setSpacing(18)
 
         # Smooth Scroll Area for responsive scaling
         self.scroll_area = ScrollArea(self)
@@ -143,8 +150,8 @@ class SmartRulesPage(QWidget):
         self.scroll_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.vbox = QVBoxLayout(self.scroll_widget)
-        self.vbox.setContentsMargins(0, 0, 16, 24)
-        self.vbox.setSpacing(16)
+        self.vbox.setContentsMargins(0, 0, 12, 24)
+        self.vbox.setSpacing(20)
 
         # 1. Header with Master Switch
         self._build_header()
@@ -175,10 +182,10 @@ class SmartRulesPage(QWidget):
 
     def _create_header_badge(self, parent_card, icon_type, title_text, subtitle_text=""):
         header = QHBoxLayout()
-        header.setSpacing(12)
+        header.setSpacing(14)
 
         icon_card = SimpleCardWidget(parent_card)
-        icon_card.setFixedSize(36, 36)
+        icon_card.setFixedSize(38, 38)
         icon_card_layout = QVBoxLayout(icon_card)
         icon_card_layout.setContentsMargins(0, 0, 0, 0)
         icon_card_layout.setAlignment(Qt.AlignCenter)
@@ -188,7 +195,7 @@ class SmartRulesPage(QWidget):
         icon_card_layout.addWidget(icon_widget, 0, Qt.AlignCenter)
 
         title_vbox = QVBoxLayout()
-        title_vbox.setSpacing(1)
+        title_vbox.setSpacing(2)
         title_lbl = StrongBodyLabel(title_text, parent_card)
         title_vbox.addWidget(title_lbl)
         if subtitle_text:
@@ -202,10 +209,10 @@ class SmartRulesPage(QWidget):
 
     def _build_header(self):
         self.header_layout = QHBoxLayout()
-        self.header_layout.setSpacing(12)
+        self.header_layout.setSpacing(16)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(2)
+        title_col.setSpacing(3)
 
         self.title_label = TitleLabel('AI Smart Rules & Routing', self)
         self.title_label.setWordWrap(True)
@@ -233,8 +240,8 @@ class SmartRulesPage(QWidget):
         self.provider_card = CardWidget(self.scroll_widget)
         self.provider_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         p_card_layout = QVBoxLayout(self.provider_card)
-        p_card_layout.setContentsMargins(20, 18, 20, 18)
-        p_card_layout.setSpacing(12)
+        p_card_layout.setContentsMargins(24, 20, 24, 20)
+        p_card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.provider_card,
@@ -249,8 +256,8 @@ class SmartRulesPage(QWidget):
                 color: #107C41;
                 background-color: rgba(16, 124, 65, 0.12);
                 border: 1px solid rgba(16, 124, 65, 0.25);
-                border-radius: 4px;
-                padding: 1px 7px;
+                border-radius: 5px;
+                padding: 2px 8px;
                 font-weight: 600;
                 font-size: 11px;
             }
@@ -260,18 +267,21 @@ class SmartRulesPage(QWidget):
 
         # Row 1: Model Selection ComboBox (Full Width)
         self.model_combo = ComboBox(self.provider_card)
+        self.model_combo.setMinimumHeight(36)
         self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.model_combo.currentIndexChanged.connect(self._on_provider_changed)
         p_card_layout.addWidget(self.model_combo)
 
         # Row 2: Action Buttons (Responsive Layout)
         p_buttons_layout = QHBoxLayout()
-        p_buttons_layout.setSpacing(10)
+        p_buttons_layout.setSpacing(12)
 
         self.connect_btn = PushButton('Connect API Key', self.provider_card, FIF.LINK)
+        self.connect_btn.setMinimumHeight(36)
         self.connect_btn.clicked.connect(self.show_api_dialog)
 
         self.scan_btn = PrimaryPushButton('Scan Local AI', self.provider_card, FIF.SEARCH)
+        self.scan_btn.setMinimumHeight(36)
         self.scan_btn.clicked.connect(self.start_scan)
 
         p_buttons_layout.addStretch()
@@ -283,19 +293,19 @@ class SmartRulesPage(QWidget):
 
     def _build_rules_section(self):
         self.table_section = QVBoxLayout()
-        self.table_section.setSpacing(10)
+        self.table_section.setSpacing(12)
 
         # Top row: Section Title + Search
         top_row = QHBoxLayout()
-        top_row.setSpacing(10)
+        top_row.setSpacing(12)
         self.table_label = StrongBodyLabel('Active Auto-Routing Rules', self)
         top_row.addWidget(self.table_label)
         top_row.addStretch()
 
         self.rule_search = SearchLineEdit(self.scroll_widget)
         self.rule_search.setPlaceholderText("Filter rules...")
-        self.rule_search.setMinimumWidth(140)
-        self.rule_search.setMaximumWidth(220)
+        self.rule_search.setMinimumWidth(150)
+        self.rule_search.setMaximumWidth(260)
         self.rule_search.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.rule_search.textChanged.connect(self._filter_rules_table)
         top_row.addWidget(self.rule_search)
@@ -303,17 +313,20 @@ class SmartRulesPage(QWidget):
 
         # Action button toolbar row
         action_row = QHBoxLayout()
-        action_row.setSpacing(8)
+        action_row.setSpacing(10)
 
         self.restore_btn = PushButton('Restore Defaults', self, FIF.SYNC)
+        self.restore_btn.setMinimumHeight(34)
         self.restore_btn.setToolTip("Restore standard category routing presets")
         self.restore_btn.clicked.connect(self.restore_default_rules)
 
-        self.add_rule_btn = PrimaryPushButton('Add Rule', self, FIF.ADD)
-        self.add_rule_btn.clicked.connect(self.open_add_rule)
-
         self.del_rule_btn = PushButton('Delete Selected', self, FIF.DELETE)
+        self.del_rule_btn.setMinimumHeight(34)
         self.del_rule_btn.clicked.connect(self.delete_selected_rule)
+
+        self.add_rule_btn = PrimaryPushButton('Add Rule', self, FIF.ADD)
+        self.add_rule_btn.setMinimumHeight(34)
+        self.add_rule_btn.clicked.connect(self.open_add_rule)
 
         action_row.addStretch()
         action_row.addWidget(self.restore_btn)
@@ -324,16 +337,15 @@ class SmartRulesPage(QWidget):
         self.table = TableWidget(self.scroll_widget)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Rule Name', 'Condition Type', 'Condition Value', 'Target Directory'])
-        self.table.setMinimumHeight(200)
+        self.table.setMinimumHeight(240)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.table.horizontalHeader().setMinimumSectionSize(80)
+        self.table.horizontalHeader().setMinimumSectionSize(90)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.table.setColumnWidth(0, 160)
-        self.table.setColumnWidth(1, 130)
-        self.table.setColumnWidth(2, 160)
+        self.table.setColumnWidth(0, 170)
+        self.table.setColumnWidth(2, 170)
         self.table_section.addWidget(self.table)
 
         self.vbox.addLayout(self.table_section)
@@ -342,8 +354,8 @@ class SmartRulesPage(QWidget):
         self.test_card = CardWidget(self.scroll_widget)
         self.test_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         t_layout = QVBoxLayout(self.test_card)
-        t_layout.setContentsMargins(20, 18, 20, 18)
-        t_layout.setSpacing(10)
+        t_layout.setContentsMargins(24, 20, 24, 20)
+        t_layout.setSpacing(14)
 
         header = self._create_header_badge(
             self.test_card,
@@ -355,15 +367,18 @@ class SmartRulesPage(QWidget):
 
         # Quick Example Chips (NO EMOJIS)
         chips_layout = QHBoxLayout()
-        chips_layout.setSpacing(8)
+        chips_layout.setSpacing(10)
         chips_lbl = CaptionLabel("Try example:", self.test_card)
         chips_layout.addWidget(chips_lbl)
 
         p1 = PillPushButton("Research_Paper.pdf", self.test_card)
+        p1.setMinimumHeight(30)
         p1.clicked.connect(lambda: self._set_test_input("Deep_Learning_Survey_2026.pdf"))
         p2 = PillPushButton("Inception_1080p.mkv", self.test_card)
+        p2.setMinimumHeight(30)
         p2.clicked.connect(lambda: self._set_test_input("Inception_Movie_1080p_BluRay.mkv"))
         p3 = PillPushButton("Dataset.tar.gz", self.test_card)
+        p3.setMinimumHeight(30)
         p3.clicked.connect(lambda: self._set_test_input("ImageNet_Training_Archive.tar.gz"))
 
         chips_layout.addWidget(p1)
@@ -373,13 +388,15 @@ class SmartRulesPage(QWidget):
         t_layout.addLayout(chips_layout)
 
         test_input_layout = QHBoxLayout()
-        test_input_layout.setSpacing(10)
+        test_input_layout.setSpacing(12)
         self.test_input = LineEdit(self.test_card)
         self.test_input.setPlaceholderText("Enter a sample URL or filename to test routing...")
+        self.test_input.setMinimumHeight(38)
         self.test_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.test_input.returnPressed.connect(self.run_route_test)
 
         self.test_btn = PrimaryPushButton('Simulate Routing', self.test_card, FIF.PLAY)
+        self.test_btn.setMinimumHeight(38)
         self.test_btn.setMinimumWidth(150)
         self.test_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.test_btn.clicked.connect(self.run_route_test)
@@ -390,6 +407,16 @@ class SmartRulesPage(QWidget):
 
         self.test_result_label = CaptionLabel("Results will appear here...", self.test_card)
         self.test_result_label.setWordWrap(True)
+        self.test_result_label.setStyleSheet("""
+            CaptionLabel {
+                background-color: rgba(128, 128, 128, 0.08);
+                border: 1px solid rgba(128, 128, 128, 0.15);
+                border-radius: 6px;
+                padding: 10px 14px;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+        """)
         t_layout.addWidget(self.test_result_label)
 
         self.vbox.addWidget(self.test_card)
@@ -428,6 +455,7 @@ class SmartRulesPage(QWidget):
         self.rule_objects = rules
 
         for row, rule in enumerate(rules):
+            self.table.setRowHeight(row, 38)
             cond_type_str = "Extension (.ext)" if rule.condition_type == "ext" else ("Filename Contains" if rule.condition_type == "contains" else "AI Category")
             self.table.setItem(row, 0, QTableWidgetItem(getattr(rule, 'name', 'Custom Rule')))
             self.table.setItem(row, 1, QTableWidgetItem(cond_type_str))

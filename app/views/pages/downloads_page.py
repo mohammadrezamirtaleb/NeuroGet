@@ -64,8 +64,8 @@ class DownloadsPage(QWidget):
         self.search_query = ""
 
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(28, 20, 28, 20)
-        self.vbox.setSpacing(14)
+        self.vbox.setContentsMargins(32, 24, 32, 24)
+        self.vbox.setSpacing(18)
 
         # 1. Header Section
         self._build_header()
@@ -91,10 +91,10 @@ class DownloadsPage(QWidget):
 
     def _build_header(self):
         self.header_layout = QHBoxLayout()
-        self.header_layout.setSpacing(12)
+        self.header_layout.setSpacing(16)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(2)
+        title_col.setSpacing(3)
 
         self.title_label = TitleLabel('Downloads', self)
         self.title_label.setWordWrap(True)
@@ -111,6 +111,7 @@ class DownloadsPage(QWidget):
 
         # Quick header action
         self.paste_file_btn = PushButton('Import Links File', self, FIF.DOCUMENT)
+        self.paste_file_btn.setMinimumHeight(36)
         self.paste_file_btn.setToolTip("Import and batch download multiple links from a text file")
         self.paste_file_btn.clicked.connect(self.import_urls_from_file)
         self.header_layout.addWidget(self.paste_file_btn, 0)
@@ -120,17 +121,17 @@ class DownloadsPage(QWidget):
     def _build_input_area(self):
         self.input_card = CardWidget(self)
         input_card_layout = QHBoxLayout(self.input_card)
-        input_card_layout.setContentsMargins(14, 10, 14, 10)
-        input_card_layout.setSpacing(10)
+        input_card_layout.setContentsMargins(18, 14, 18, 14)
+        input_card_layout.setSpacing(12)
 
         # Quick AI / Download Icon
         input_icon = IconWidget(FIF.ROBOT, self.input_card)
-        input_icon.setFixedSize(22, 22)
+        input_icon.setFixedSize(24, 24)
         input_card_layout.addWidget(input_icon)
 
         self.url_input = LineEdit(self.input_card)
         self.url_input.setPlaceholderText("Paste URL (HTTP/HTTPS/FTP) or ask AI (e.g. 'download python 3.12 installer')...")
-        self.url_input.setMinimumHeight(38)
+        self.url_input.setMinimumHeight(40)
         self.url_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.url_input.setClearButtonEnabled(True)
         self.url_input.returnPressed.connect(self.add_download)
@@ -144,7 +145,7 @@ class DownloadsPage(QWidget):
 
         # Main Download Button
         self.add_btn = PrimaryPushButton('Download', self.input_card, FIF.DOWNLOAD)
-        self.add_btn.setMinimumHeight(38)
+        self.add_btn.setMinimumHeight(40)
         self.add_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.add_btn.clicked.connect(self.add_download)
         input_card_layout.addWidget(self.add_btn)
@@ -154,7 +155,7 @@ class DownloadsPage(QWidget):
     def _build_toolbar(self):
         # Row 1: Filter Segmented Widget & Search LineEdit
         top_filter_row = QHBoxLayout()
-        top_filter_row.setSpacing(12)
+        top_filter_row.setSpacing(14)
 
         self.filter_pivot = SegmentedWidget(self)
         self.filter_pivot.addItem('all', 'All Tasks', onClick=lambda: self._set_filter('all'))
@@ -165,8 +166,8 @@ class DownloadsPage(QWidget):
 
         self.search_input = SearchLineEdit(self)
         self.search_input.setPlaceholderText("Search tasks by name or URL...")
-        self.search_input.setMinimumWidth(140)
-        self.search_input.setMaximumWidth(260)
+        self.search_input.setMinimumWidth(150)
+        self.search_input.setMaximumWidth(280)
         self.search_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._on_search_changed)
@@ -177,8 +178,8 @@ class DownloadsPage(QWidget):
 
         # Row 2: Queue Counter & Batch Controls
         self.toolbar_layout = QHBoxLayout()
-        self.toolbar_layout.setContentsMargins(0, 0, 0, 0)
-        self.toolbar_layout.setSpacing(8)
+        self.toolbar_layout.setContentsMargins(0, 4, 0, 4)
+        self.toolbar_layout.setSpacing(10)
 
         self.counter_label = CaptionLabel("0 tasks in queue", self)
         self.counter_label.setWordWrap(True)
@@ -211,18 +212,18 @@ class DownloadsPage(QWidget):
 
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignTop)
-        self.scroll_layout.setSpacing(10)
+        self.scroll_layout.setSpacing(14)
 
         # Modern Elevated Empty State Card
         self.empty_card = CardWidget(self.scroll_widget)
         self.empty_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         empty_layout = QVBoxLayout(self.empty_card)
-        empty_layout.setContentsMargins(24, 36, 24, 36)
+        empty_layout.setContentsMargins(32, 44, 32, 44)
         empty_layout.setAlignment(Qt.AlignCenter)
-        empty_layout.setSpacing(12)
+        empty_layout.setSpacing(16)
 
         empty_icon_card = SimpleCardWidget(self.empty_card)
-        empty_icon_card.setFixedSize(56, 56)
+        empty_icon_card.setFixedSize(60, 60)
         empty_icon_layout = QVBoxLayout(empty_icon_card)
         empty_icon_layout.setContentsMargins(0, 0, 0, 0)
         empty_icon_layout.setAlignment(Qt.AlignCenter)
@@ -247,7 +248,7 @@ class DownloadsPage(QWidget):
 
         # Quick Tips / Feature Highlights
         tips_layout = QHBoxLayout()
-        tips_layout.setSpacing(8)
+        tips_layout.setSpacing(10)
         tips_layout.setAlignment(Qt.AlignCenter)
 
         chip1 = CaptionLabel("32 Parallel Segments", self.empty_card)
@@ -259,8 +260,8 @@ class DownloadsPage(QWidget):
                     color: #888888;
                     background-color: rgba(255, 255, 255, 0.05);
                     border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 4px;
-                    padding: 2px 8px;
+                    border-radius: 6px;
+                    padding: 3px 10px;
                     font-size: 11px;
                 }
             """)

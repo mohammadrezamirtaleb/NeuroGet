@@ -31,12 +31,12 @@ class SettingsPage(QWidget):
         self.setObjectName("SettingsPage")
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(28, 20, 28, 20)
-        self.main_layout.setSpacing(16)
+        self.main_layout.setContentsMargins(32, 24, 32, 24)
+        self.main_layout.setSpacing(18)
 
         # Page Header
         header_vbox = QVBoxLayout()
-        header_vbox.setSpacing(2)
+        header_vbox.setSpacing(3)
         self.title_label = TitleLabel('Settings & Preferences', self)
         self.title_label.setWordWrap(True)
         self.sub_title_label = CaptionLabel(
@@ -59,8 +59,8 @@ class SettingsPage(QWidget):
         self.scroll_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.vbox = QVBoxLayout(self.scroll_widget)
-        self.vbox.setContentsMargins(0, 0, 16, 24)
-        self.vbox.setSpacing(18)
+        self.vbox.setContentsMargins(0, 0, 12, 24)
+        self.vbox.setSpacing(22)
 
         # 1. Storage & Default Directory Card
         self._build_storage_card()
@@ -88,10 +88,10 @@ class SettingsPage(QWidget):
 
     def _create_header_badge(self, parent_card, icon_type, title_text, subtitle_text=""):
         header = QHBoxLayout()
-        header.setSpacing(12)
+        header.setSpacing(14)
 
         icon_card = SimpleCardWidget(parent_card)
-        icon_card.setFixedSize(36, 36)
+        icon_card.setFixedSize(38, 38)
         icon_card_layout = QVBoxLayout(icon_card)
         icon_card_layout.setContentsMargins(0, 0, 0, 0)
         icon_card_layout.setAlignment(Qt.AlignCenter)
@@ -101,7 +101,7 @@ class SettingsPage(QWidget):
         icon_card_layout.addWidget(icon_widget, 0, Qt.AlignCenter)
 
         title_vbox = QVBoxLayout()
-        title_vbox.setSpacing(1)
+        title_vbox.setSpacing(2)
         title_lbl = StrongBodyLabel(title_text, parent_card)
         title_vbox.addWidget(title_lbl)
         if subtitle_text:
@@ -116,8 +116,8 @@ class SettingsPage(QWidget):
     def _build_storage_card(self):
         self.storage_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.storage_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.storage_card,
@@ -128,15 +128,18 @@ class SettingsPage(QWidget):
         card_layout.addLayout(header)
 
         self.path_layout = QHBoxLayout()
-        self.path_layout.setSpacing(10)
+        self.path_layout.setSpacing(12)
         self.path_input = LineEdit(self.storage_card)
         self.path_input.setReadOnly(True)
+        self.path_input.setMinimumHeight(36)
         self.path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.path_btn = PushButton('Change Folder', self.storage_card, FIF.FOLDER)
+        self.path_btn.setMinimumHeight(36)
         self.path_btn.clicked.connect(self.choose_download_dir)
 
         self.open_folder_btn = PushButton('Open in Explorer', self.storage_card, FIF.FOLDER_ADD)
+        self.open_folder_btn.setMinimumHeight(36)
         self.open_folder_btn.clicked.connect(self._open_current_download_dir)
 
         self.path_layout.addWidget(self.path_input, 1)
@@ -149,8 +152,8 @@ class SettingsPage(QWidget):
     def _build_ai_card(self):
         self.ai_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.ai_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.ai_card,
@@ -195,8 +198,8 @@ class SettingsPage(QWidget):
     def _build_engine_card(self):
         self.engine_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.engine_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.engine_card,
@@ -208,9 +211,9 @@ class SettingsPage(QWidget):
 
         # Concurrency SpinBox Row
         thread_row = QHBoxLayout()
-        thread_row.setSpacing(12)
+        thread_row.setSpacing(16)
         thread_title_vbox = QVBoxLayout()
-        thread_title_vbox.setSpacing(1)
+        thread_title_vbox.setSpacing(2)
         self.thread_lbl = StrongBodyLabel('Max Concurrent Segments per Download:', self.engine_card)
         thread_desc = CaptionLabel('Splits large files into parallel dynamic byte chunks for accelerated speed.', self.engine_card)
         thread_desc.setWordWrap(True)
@@ -219,7 +222,8 @@ class SettingsPage(QWidget):
 
         self.thread_spin = SpinBox(self.engine_card)
         self.thread_spin.setRange(1, 32)
-        self.thread_spin.setFixedWidth(110)
+        self.thread_spin.setMinimumHeight(34)
+        self.thread_spin.setFixedWidth(120)
         self.thread_spin.valueChanged.connect(lambda v: set_setting("max_threads", str(v)))
 
         thread_row.addLayout(thread_title_vbox, 1)
@@ -228,9 +232,9 @@ class SettingsPage(QWidget):
 
         # Socket Timeout Row
         timeout_row = QHBoxLayout()
-        timeout_row.setSpacing(12)
+        timeout_row.setSpacing(16)
         timeout_vbox = QVBoxLayout()
-        timeout_vbox.setSpacing(1)
+        timeout_vbox.setSpacing(2)
         timeout_title = StrongBodyLabel('Socket Connection Timeout:', self.engine_card)
         timeout_sub = CaptionLabel('Maximum time to wait before retrying slow server handshakes.', self.engine_card)
         timeout_sub.setWordWrap(True)
@@ -241,7 +245,8 @@ class SettingsPage(QWidget):
         self.timeout_combo.addItem("15 Seconds (Fast Failover)", userData="15")
         self.timeout_combo.addItem("30 Seconds (Default)", userData="30")
         self.timeout_combo.addItem("60 Seconds (Lenient)", userData="60")
-        self.timeout_combo.setMinimumWidth(200)
+        self.timeout_combo.setMinimumHeight(34)
+        self.timeout_combo.setMinimumWidth(220)
         self.timeout_combo.currentIndexChanged.connect(self._on_timeout_changed)
 
         timeout_row.addLayout(timeout_vbox, 1)
@@ -253,8 +258,8 @@ class SettingsPage(QWidget):
     def _build_notifications_card(self):
         self.notify_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.notify_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.notify_card,
@@ -281,8 +286,8 @@ class SettingsPage(QWidget):
     def _build_update_card(self):
         self.update_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.update_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.update_card,
@@ -293,7 +298,7 @@ class SettingsPage(QWidget):
         card_layout.addLayout(header)
 
         up_top_row = QHBoxLayout()
-        up_top_row.setSpacing(12)
+        up_top_row.setSpacing(16)
 
         ver_vbox = QVBoxLayout()
         ver_vbox.setSpacing(2)
@@ -304,19 +309,21 @@ class SettingsPage(QWidget):
                 color: #0078D4;
                 background-color: rgba(0, 120, 212, 0.12);
                 border: 1px solid rgba(0, 120, 212, 0.25);
-                border-radius: 4px;
-                padding: 1px 7px;
+                border-radius: 5px;
+                padding: 2px 8px;
                 font-weight: 600;
                 font-size: 11px;
             }
         """)
         ver_row = QHBoxLayout()
+        ver_row.setSpacing(10)
         ver_row.addWidget(self.version_info_lbl)
         ver_row.addWidget(self.ver_status_badge)
         ver_row.addStretch()
         ver_vbox.addLayout(ver_row)
 
         self.check_updates_btn = PrimaryPushButton('Check for Updates', self.update_card, FIF.SYNC)
+        self.check_updates_btn.setMinimumHeight(36)
         self.check_updates_btn.clicked.connect(self.check_for_updates_clicked)
 
         up_top_row.addLayout(ver_vbox, 1)
@@ -325,12 +332,13 @@ class SettingsPage(QWidget):
 
         # Channel Selection Row
         channel_row = QHBoxLayout()
-        channel_row.setSpacing(10)
+        channel_row.setSpacing(12)
         self.channel_lbl = BodyLabel('Update Channel:', self.update_card)
         self.channel_combo = ComboBox(self.update_card)
         self.channel_combo.addItem("Stable (Recommended)", userData="stable")
         self.channel_combo.addItem("Beta (Early Access & Pre-releases)", userData="beta")
         self.channel_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.channel_combo.setMinimumHeight(34)
         self.channel_combo.setMinimumWidth(220)
         self.channel_combo.currentIndexChanged.connect(self._on_channel_changed)
 
@@ -349,8 +357,8 @@ class SettingsPage(QWidget):
     def _build_data_card(self):
         self.data_card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(self.data_card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(24, 22, 24, 22)
+        card_layout.setSpacing(16)
 
         header = self._create_header_badge(
             self.data_card,
@@ -367,12 +375,14 @@ class SettingsPage(QWidget):
         card_layout.addWidget(db_label)
 
         self.data_layout = QHBoxLayout()
-        self.data_layout.setSpacing(10)
+        self.data_layout.setSpacing(12)
 
         self.clear_history_btn = PushButton('Clear Download History', self.data_card, FIF.DELETE)
+        self.clear_history_btn.setMinimumHeight(36)
         self.clear_history_btn.clicked.connect(self.prompt_clear_history)
 
         self.reset_db_btn = PushButton('Factory Reset Database', self.data_card, FIF.DELETE)
+        self.reset_db_btn.setMinimumHeight(36)
         self.reset_db_btn.clicked.connect(self.prompt_reset_database)
 
         self.data_layout.addWidget(self.clear_history_btn)

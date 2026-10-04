@@ -35,8 +35,8 @@ class AboutPage(QWidget):
         self.setObjectName("AboutPage")
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(28, 20, 28, 20)
-        self.main_layout.setSpacing(16)
+        self.main_layout.setContentsMargins(32, 24, 32, 24)
+        self.main_layout.setSpacing(18)
 
         # Smooth Scroll Area
         self.scroll_area = ScrollArea(self)
@@ -49,8 +49,8 @@ class AboutPage(QWidget):
         self.scroll_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.vbox = QVBoxLayout(self.scroll_widget)
-        self.vbox.setContentsMargins(0, 0, 16, 24)
-        self.vbox.setSpacing(18)
+        self.vbox.setContentsMargins(0, 0, 12, 24)
+        self.vbox.setSpacing(22)
 
         # 1. Hero Header Card
         self._build_hero_card()
@@ -73,12 +73,12 @@ class AboutPage(QWidget):
     def _build_hero_card(self):
         hero_card = CardWidget(self.scroll_widget)
         h_layout = QHBoxLayout(hero_card)
-        h_layout.setContentsMargins(24, 20, 24, 20)
-        h_layout.setSpacing(20)
+        h_layout.setContentsMargins(28, 24, 28, 24)
+        h_layout.setSpacing(24)
 
         # App Logo / Icon container
         icon_card = SimpleCardWidget(hero_card)
-        icon_card.setFixedSize(64, 64)
+        icon_card.setFixedSize(68, 68)
         icon_card_layout = QVBoxLayout(icon_card)
         icon_card_layout.setContentsMargins(0, 0, 0, 0)
         icon_card_layout.setAlignment(Qt.AlignCenter)
@@ -86,22 +86,22 @@ class AboutPage(QWidget):
         logo_file = resource_path("assets/logo_transparent.png")
         if os.path.exists(logo_file):
             logo_img = ImageLabel(logo_file, icon_card)
-            logo_img.setFixedSize(52, 52)
-            logo_img.scaledToWidth(52)
+            logo_img.setFixedSize(54, 54)
+            logo_img.scaledToWidth(54)
             icon_card_layout.addWidget(logo_img, 0, Qt.AlignCenter)
         else:
             hero_icon = IconWidget(FIF.ROBOT, icon_card)
-            hero_icon.setFixedSize(36, 36)
+            hero_icon.setFixedSize(38, 38)
             icon_card_layout.addWidget(hero_icon, 0, Qt.AlignCenter)
 
         h_layout.addWidget(icon_card)
 
         # Titles and version badge
         title_vbox = QVBoxLayout()
-        title_vbox.setSpacing(4)
+        title_vbox.setSpacing(6)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(10)
+        top_row.setSpacing(12)
         app_title = TitleLabel(APP_NAME, hero_card)
         
         ver_badge = CaptionLabel(f"v{__version__} Official Release", hero_card)
@@ -110,7 +110,7 @@ class AboutPage(QWidget):
                 color: #0078D4;
                 background-color: rgba(0, 120, 212, 0.12);
                 border: 1px solid rgba(0, 120, 212, 0.25);
-                border-radius: 6px;
+                border-radius: 5px;
                 padding: 2px 8px;
                 font-weight: 600;
                 font-size: 11px;
@@ -135,11 +135,11 @@ class AboutPage(QWidget):
     def _build_overview_card(self):
         card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 16, 20, 16)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(24, 20, 24, 20)
+        card_layout.setSpacing(14)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(12)
         icon = IconWidget(FIF.APPLICATION, card)
         icon.setFixedSize(20, 20)
         title = StrongBodyLabel("About NeuroGet", card)
@@ -165,7 +165,7 @@ class AboutPage(QWidget):
         grid_container = QWidget(self.scroll_widget)
         grid = QGridLayout(grid_container)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(12)
+        grid.setSpacing(16)
 
         features = [
             (
@@ -207,13 +207,13 @@ class AboutPage(QWidget):
             item_card = SimpleCardWidget(grid_container)
             item_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             item_layout = QVBoxLayout(item_card)
-            item_layout.setContentsMargins(16, 14, 16, 14)
-            item_layout.setSpacing(8)
+            item_layout.setContentsMargins(20, 18, 20, 18)
+            item_layout.setSpacing(10)
 
             head_row = QHBoxLayout()
-            head_row.setSpacing(8)
+            head_row.setSpacing(10)
             f_icon = IconWidget(icon_type, item_card)
-            f_icon.setFixedSize(18, 18)
+            f_icon.setFixedSize(20, 20)
             f_title = StrongBodyLabel(feat_title, item_card)
             f_title.setWordWrap(True)
             head_row.addWidget(f_icon)
@@ -231,11 +231,11 @@ class AboutPage(QWidget):
     def _build_developer_card(self):
         card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 16, 20, 16)
-        card_layout.setSpacing(12)
+        card_layout.setContentsMargins(24, 20, 24, 20)
+        card_layout.setSpacing(14)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(12)
         icon = IconWidget(FIF.GITHUB, card)
         icon.setFixedSize(20, 20)
         title = StrongBodyLabel("Open Source & Community", card)
@@ -254,15 +254,18 @@ class AboutPage(QWidget):
 
         # Interactive Community Action Buttons
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
+        btn_row.setSpacing(12)
 
         self.btn_github = PrimaryPushButton("GitHub Repository", card, FIF.GITHUB)
+        self.btn_github.setMinimumHeight(36)
         self.btn_github.clicked.connect(lambda: self._open_url("https://github.com/mohammadrezamirtaleb/NeuroGet"))
 
         self.btn_issues = PushButton("Report an Issue", card, FIF.FEEDBACK)
+        self.btn_issues.setMinimumHeight(36)
         self.btn_issues.clicked.connect(lambda: self._open_url("https://github.com/mohammadrezamirtaleb/NeuroGet/issues"))
 
         self.btn_updates = PushButton("Check for Updates", card, FIF.SYNC)
+        self.btn_updates.setMinimumHeight(36)
         self.btn_updates.clicked.connect(self._check_updates)
 
         btn_row.addWidget(self.btn_github)
@@ -276,11 +279,11 @@ class AboutPage(QWidget):
     def _build_tech_card(self):
         card = CardWidget(self.scroll_widget)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 16, 20, 16)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(24, 20, 24, 20)
+        card_layout.setSpacing(14)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(12)
         icon = IconWidget(FIF.CODE, card)
         icon.setFixedSize(20, 20)
         title = StrongBodyLabel("Engine Specifications & Privacy Commitment", card)
