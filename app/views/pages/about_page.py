@@ -9,7 +9,7 @@ from PyQt5.QtGui import QDesktopServices
 from qfluentwidgets import (
     TitleLabel, SubtitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     PrimaryPushButton, PushButton, CardWidget, SimpleCardWidget,
-    IconWidget, ImageLabel, ScrollArea, InfoBar
+    IconWidget, ImageLabel, ScrollArea, InfoBar, SmoothMode
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -42,7 +42,8 @@ class AboutPage(QWidget):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll_area.enableTransparentBackground()
+        self.scroll_area.setSmoothMode(SmoothMode.QUADRATI, Qt.Vertical)
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setStyleSheet("QWidget { background: transparent; }")

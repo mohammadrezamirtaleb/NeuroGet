@@ -31,7 +31,8 @@ from qfluentwidgets import (
     SimpleCardWidget,
     IconWidget,
     SegmentedWidget,
-    PillPushButton
+    PillPushButton,
+    SmoothMode
 )
 
 from qfluentwidgets import FluentIcon as FIF
@@ -204,7 +205,8 @@ class DownloadsPage(QWidget):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet("QScrollArea {background: transparent; border: none;}")
+        self.scroll_area.enableTransparentBackground()
+        self.scroll_area.setSmoothMode(SmoothMode.QUADRATI, Qt.Vertical)
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setStyleSheet("QWidget {background: transparent;}")

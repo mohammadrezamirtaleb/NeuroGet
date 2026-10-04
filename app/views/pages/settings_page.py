@@ -8,7 +8,7 @@ from qfluentwidgets import (
     TitleLabel, SubtitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel, LineEdit,
     PushButton, PrimaryPushButton, TransparentPushButton, CheckBox, SwitchButton,
     SpinBox, MessageBox, InfoBar, CardWidget, SimpleCardWidget,
-    ComboBox, ScrollArea, IconWidget, isDarkTheme
+    ComboBox, ScrollArea, IconWidget, isDarkTheme, SmoothMode
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -52,7 +52,8 @@ class SettingsPage(QWidget):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll_area.enableTransparentBackground()
+        self.scroll_area.setSmoothMode(SmoothMode.QUADRATI, Qt.Vertical)
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setStyleSheet("QWidget { background: transparent; }")

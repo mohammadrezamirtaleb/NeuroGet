@@ -8,7 +8,8 @@ from qfluentwidgets import (
     TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SearchLineEdit, PrimaryPushButton, PushButton, TableWidget,
     InfoBar, SwitchButton, MessageBox, LineEdit, CardWidget,
-    ScrollArea, IconWidget, SimpleCardWidget, PillPushButton
+    ScrollArea, IconWidget, SimpleCardWidget, PillPushButton,
+    setCustomStyleSheet, SmoothMode
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -143,7 +144,8 @@ class SmartRulesPage(QWidget):
         self.scroll_area = ScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll_area.enableTransparentBackground()
+        self.scroll_area.setSmoothMode(SmoothMode.QUADRATI, Qt.Vertical)
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setStyleSheet("QWidget { background: transparent; }")
@@ -337,20 +339,24 @@ class SmartRulesPage(QWidget):
         self.table = TableWidget(self.scroll_widget)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Rule Name', 'Condition Type', 'Condition Value', 'Target Directory'])
-        self.table.setMinimumHeight(240)
-        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.table.setBorderVisible(False)
         self.table.setBorderRadius(8)
         self.table.setShowGrid(False)
         self.table.verticalHeader().hide()
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.table.wheelEvent = lambda event: event.ignore()
         self.table.setAlternatingRowColors(True)
-        self.table.setStyleSheet("""
+
+        light_table_qss = """
             QTableView {
                 background: transparent;
                 outline: none;
                 border: none;
-                selection-background-color: transparent;
-                alternate-background-color: rgba(255, 255, 255, 0.02);
+                selection-background-color: rgba(0, 0, 0, 0.06);
+                alternate-background-color: rgba(0, 0, 0, 0.02);
+                color: rgb(32, 32, 32);
             }
             QHeaderView {
                 background-color: transparent;
@@ -358,8 +364,9 @@ class SmartRulesPage(QWidget):
             }
             QHeaderView::section {
                 background-color: transparent;
+                color: rgba(0, 0, 0, 0.85);
                 border: none;
-                border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+                border-bottom: 1px solid rgba(0, 0, 0, 0.12);
                 padding-left: 12px;
                 padding-right: 12px;
                 padding-top: 6px;
@@ -371,8 +378,44 @@ class SmartRulesPage(QWidget):
                 border: none;
                 padding-left: 12px;
                 padding-right: 12px;
+                color: rgb(32, 32, 32);
             }
-        """)
+        """
+
+        dark_table_qss = """
+            QTableView {
+                background: transparent;
+                outline: none;
+                border: none;
+                selection-background-color: rgba(255, 255, 255, 0.08);
+                alternate-background-color: rgba(255, 255, 255, 0.02);
+                color: #FFFFFF;
+            }
+            QHeaderView {
+                background-color: transparent;
+                border: none;
+            }
+            QHeaderView::section {
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.90);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QTableView::item {
+                border: none;
+                padding-left: 12px;
+                padding-right: 12px;
+                color: #FFFFFF;
+            }
+        """
+        setCustomStyleSheet(self.table, light_table_qss, dark_table_qss)
+
         self.table.horizontalHeader().setMinimumSectionSize(90)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -488,13 +531,18 @@ class SmartRulesPage(QWidget):
         self.table.setRowCount(len(rules))
         self.rule_objects = rules
 
+        row_h = 38
         for row, rule in enumerate(rules):
-            self.table.setRowHeight(row, 38)
+            self.table.setRowHeight(row, row_h)
             cond_type_str = "Extension (.ext)" if rule.condition_type == "ext" else ("Filename Contains" if rule.condition_type == "contains" else "AI Category")
             self.table.setItem(row, 0, QTableWidgetItem(getattr(rule, 'name', 'Custom Rule')))
             self.table.setItem(row, 1, QTableWidgetItem(cond_type_str))
             self.table.setItem(row, 2, QTableWidgetItem(rule.condition_value))
             self.table.setItem(row, 3, QTableWidgetItem(rule.destination_path))
+
+        header_h = self.table.horizontalHeader().height() if self.table.horizontalHeader().height() > 0 else 34
+        calc_h = header_h + len(rules) * row_h + 10
+        self.table.setFixedHeight(max(200, calc_h))
 
     def open_add_rule(self):
         d = AddRuleDialog(self)
