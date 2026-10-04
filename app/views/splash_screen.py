@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from PyQt5.QtWidgets import QWidget, QApplication, QGraphicsDropShadowEffect
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QTimer, QRectF, QPointF
 from PyQt5.QtGui import (
@@ -36,8 +37,9 @@ class NeuroSplashScreen(QWidget):
             if not raw.isNull():
                 self.logo_pixmap = raw.scaled(86, 86, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-        self._opacity = 0.0
+        self._opacity = 1.0
         self._progress = 0.0
+        self._is_closing = False
 
         # Multi-layer smooth shadow effect
         shadow = QGraphicsDropShadowEffect(self)
@@ -46,20 +48,19 @@ class NeuroSplashScreen(QWidget):
         shadow.setOffset(0, 12)
         self.setGraphicsEffect(shadow)
 
+        # 60 FPS smooth progress timer (frame-accurate, liquid motion)
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(16)  # ~60 FPS
+        self._anim_timer.timeout.connect(self._on_anim_step)
+        self._anim_start_time = None
+        self._anim_duration = 1100  # 1.1s total smooth progress
+
         # Opacity Fade-in Animation
         self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
-        self.fade_anim.setDuration(450)
+        self.fade_anim.setDuration(280)
         self.fade_anim.setStartValue(0.0)
         self.fade_anim.setEndValue(1.0)
         self.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-        # Loading Progress Animation
-        self.prog_anim = QPropertyAnimation(self, b"loadingProgress")
-        self.prog_anim.setDuration(1250)
-        self.prog_anim.setStartValue(0.0)
-        self.prog_anim.setEndValue(1.0)
-        self.prog_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
-        self.prog_anim.finished.connect(self._on_done)
 
         # Center on primary screen
         screen = QApplication.primaryScreen()
@@ -85,24 +86,52 @@ class NeuroSplashScreen(QWidget):
         return None
 
     def start(self):
+        self.setWindowOpacity(0.0)
         self.show()
         self.fade_anim.start()
-        self.prog_anim.start()
 
-    def _on_done(self):
-        self.set_loading_progress(1.0)
-        QTimer.singleShot(350, self._start_fade_out)
+        # Start 60fps progress animation
+        self._anim_start_time = time.time()
+        self._anim_timer.start()
 
-    def _start_fade_out(self):
+    def _on_anim_step(self):
+        if self._anim_start_time is None:
+            return
+
+        elapsed = (time.time() - self._anim_start_time) * 1000.0
+        t = min(1.0, elapsed / self._anim_duration)
+
+        # Smooth cubic ease-in-out curve
+        if t < 0.5:
+            progress = 4.0 * t * t * t
+        else:
+            f = (2.0 * t) - 2.0
+            progress = 0.5 * f * f * f + 1.0
+
+        self._progress = max(0.0, min(1.0, progress))
+        self.update()
+
+        if t >= 1.0:
+            self._anim_timer.stop()
+            self._progress = 1.0
+            self.update()
+            # Brief hold at 100% so user sees completion, then finish
+            QTimer.singleShot(180, self._start_finish)
+
+    def _start_finish(self):
+        if self._is_closing:
+            return
+        self._is_closing = True
+
         self.fade_out = QPropertyAnimation(self, b"windowOpacity")
-        self.fade_out.setDuration(420)
+        self.fade_out.setDuration(220)
         self.fade_out.setStartValue(1.0)
         self.fade_out.setEndValue(0.0)
         self.fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
-        self.fade_out.finished.connect(self._finish_and_close)
+        self.fade_out.finished.connect(self._complete_close)
         self.fade_out.start()
 
-    def _finish_and_close(self):
+    def _complete_close(self):
         self.finished.emit()
         self.close()
 

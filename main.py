@@ -215,6 +215,8 @@ if __name__ == '__main__':
     
     # Show Custom Splash Screen First
     splash = NeuroSplashScreen(resource_path('assets/logo_transparent.png'))
+    splash.start()
+    app.processEvents()
     
     # Main Window (hidden initially)
     w = MainWindow()
@@ -223,6 +225,5 @@ if __name__ == '__main__':
         w.show()
         
     splash.finished.connect(on_splash_finished)
-    splash.start()
     
     sys.exit(app.exec_())
