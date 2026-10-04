@@ -7,8 +7,8 @@ from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
 from qfluentwidgets import (
     TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
-    PrimaryPushButton, PushButton, CardWidget, IconWidget,
-    ProgressBar, InfoBar, InfoBarPosition
+    PrimaryPushButton, PushButton, CardWidget, SimpleCardWidget, IconWidget,
+    ProgressBar, InfoBar, InfoBarPosition, TextEdit
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -96,16 +96,21 @@ class UpdateDialog(QDialog):
 
         self.vbox.addLayout(self.notes_header_layout)
 
-        # 3. Changelog Viewer
-        self.changelog_view = QTextEdit(self)
+        # 3. Changelog Viewer Card
+        self.changelog_card = CardWidget(self)
+        c_layout = QVBoxLayout(self.changelog_card)
+        c_layout.setContentsMargins(16, 14, 16, 14)
+        c_layout.setSpacing(8)
+
+        self.changelog_view = TextEdit(self.changelog_card)
         self.changelog_view.setReadOnly(True)
         self.changelog_view.setStyleSheet("""
-            QTextEdit {
-                font-family: 'Segoe UI', sans-serif;
+            TextEdit, QTextEdit {
+                font-family: 'Segoe UI', system-ui, sans-serif;
                 font-size: 13px;
                 line-height: 1.5;
-                padding: 12px;
-                border-radius: 8px;
+                border: none;
+                background-color: transparent;
             }
         """)
 
@@ -114,7 +119,8 @@ class UpdateDialog(QDialog):
             raw_changelog = "No detailed release notes provided for this release."
 
         self.changelog_view.setMarkdown(raw_changelog)
-        self.vbox.addWidget(self.changelog_view, 1)
+        c_layout.addWidget(self.changelog_view)
+        self.vbox.addWidget(self.changelog_card, 1)
 
         # 4. Download Progress Card (Hidden initially)
         self.progress_card = CardWidget(self)
