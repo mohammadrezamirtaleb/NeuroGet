@@ -219,14 +219,24 @@ if __name__ == '__main__':
     # Show Custom Splash Screen First
     splash = NeuroSplashScreen(resource_path('assets/logo_transparent.png'))
     splash.start()
-    app.processEvents()
     
-    # Main Window (hidden initially)
-    w = MainWindow()
+    # Main Window (pre-warmed and revealed smoothly on splash finish)
+    w = None
     
     def on_splash_finished():
+        global w
+        if w is None:
+            w = MainWindow()
         w.show()
         
     splash.finished.connect(on_splash_finished)
+    
+    def prewarm_main_window():
+        global w
+        if w is None:
+            w = MainWindow()
+            
+    # Initialize MainWindow while splash animation is actively rendering
+    QTimer.singleShot(150, prewarm_main_window)
     
     sys.exit(app.exec_())

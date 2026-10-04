@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 from PyQt5.QtWidgets import QWidget, QApplication, QGraphicsDropShadowEffect
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QTimer, QRectF, QPointF
 from PyQt5.QtGui import (
@@ -48,16 +47,14 @@ class NeuroSplashScreen(QWidget):
         shadow.setOffset(0, 12)
         self.setGraphicsEffect(shadow)
 
-        # 60 FPS smooth progress timer (frame-accurate, liquid motion)
+        # 60 FPS incremental progress timer (guarantees silky smooth motion on every device)
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(16)  # ~60 FPS
         self._anim_timer.timeout.connect(self._on_anim_step)
-        self._anim_start_time = None
-        self._anim_duration = 1100  # 1.1s total smooth progress
 
         # Opacity Fade-in Animation
         self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
-        self.fade_anim.setDuration(280)
+        self.fade_anim.setDuration(240)
         self.fade_anim.setStartValue(0.0)
         self.fade_anim.setEndValue(1.0)
         self.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -89,34 +86,27 @@ class NeuroSplashScreen(QWidget):
         self.setWindowOpacity(0.0)
         self.show()
         self.fade_anim.start()
-
-        # Start 60fps progress animation
-        self._anim_start_time = time.time()
+        # Start smooth timer ticking
         self._anim_timer.start()
 
     def _on_anim_step(self):
-        if self._anim_start_time is None:
-            return
-
-        elapsed = (time.time() - self._anim_start_time) * 1000.0
-        t = min(1.0, elapsed / self._anim_duration)
-
-        # Smooth cubic ease-in-out curve
-        if t < 0.5:
-            progress = 4.0 * t * t * t
+        # Guaranteed progressive fill across ~70 smooth frames
+        if self._progress < 0.25:
+            step = 0.014  # Smooth takeoff
+        elif self._progress < 0.70:
+            step = 0.020  # Fast linear glide through middle
+        elif self._progress < 0.92:
+            step = 0.014  # Smooth approach
         else:
-            f = (2.0 * t) - 2.0
-            progress = 0.5 * f * f * f + 1.0
+            step = 0.008  # Gentle finish to exactly 100%
 
-        self._progress = max(0.0, min(1.0, progress))
+        self._progress = min(1.0, self._progress + step)
         self.update()
 
-        if t >= 1.0:
+        if self._progress >= 1.0:
             self._anim_timer.stop()
-            self._progress = 1.0
-            self.update()
-            # Brief hold at 100% so user sees completion, then finish
-            QTimer.singleShot(180, self._start_finish)
+            # Hold at 100% briefly so user sees completion, then finish
+            QTimer.singleShot(220, self._start_finish)
 
     def _start_finish(self):
         if self._is_closing:
@@ -148,7 +138,7 @@ class NeuroSplashScreen(QWidget):
         return self._progress
 
     def set_loading_progress(self, value):
-        self._progress = value
+        self._progress = max(0.0, min(1.0, value))
         self.update()
 
     loadingProgress = pyqtProperty(float, get_loading_progress, set_loading_progress)
