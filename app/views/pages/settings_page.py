@@ -24,10 +24,11 @@ class SettingsPage(QWidget):
         self.setObjectName("SettingsPage")
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(40, 30, 40, 30)
+        self.main_layout.setContentsMargins(28, 20, 28, 20)
         self.main_layout.setSpacing(16)
 
         self.title_label = TitleLabel('Settings & Preferences', self)
+        self.title_label.setWordWrap(True)
         self.main_layout.addWidget(self.title_label)
 
         # Smooth Scroll Area for Settings Sections
@@ -82,6 +83,7 @@ class SettingsPage(QWidget):
         card_layout.addLayout(header)
 
         desc = CaptionLabel('Files downloaded without custom routing rules will be saved to this folder.', self.storage_card)
+        desc.setWordWrap(True)
         card_layout.addWidget(desc)
 
         self.path_layout = QHBoxLayout()
@@ -157,6 +159,7 @@ class SettingsPage(QWidget):
         card_layout.addLayout(row)
 
         desc = CaptionLabel('Higher segment counts provide maximum multi-part download acceleration on high-speed internet connections.', self.engine_card)
+        desc.setWordWrap(True)
         card_layout.addWidget(desc)
 
         self.vbox.addWidget(self.engine_card)
@@ -194,7 +197,8 @@ class SettingsPage(QWidget):
         self.channel_combo = ComboBox(self.update_card)
         self.channel_combo.addItem("Stable (Recommended)", userData="stable")
         self.channel_combo.addItem("Beta (Early Access & Pre-releases)", userData="beta")
-        self.channel_combo.setMinimumWidth(260)
+        self.channel_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.channel_combo.setMinimumWidth(180)
         self.channel_combo.currentIndexChanged.connect(self._on_channel_changed)
 
         channel_row.addWidget(self.channel_lbl)
@@ -225,6 +229,7 @@ class SettingsPage(QWidget):
         card_layout.addLayout(header)
 
         desc = CaptionLabel('Manage cached download history or perform a clean factory reset of application settings and routing rules.', self.data_card)
+        desc.setWordWrap(True)
         card_layout.addWidget(desc)
 
         self.data_layout = QHBoxLayout()

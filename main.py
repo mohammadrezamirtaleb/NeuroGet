@@ -70,14 +70,14 @@ class MainWindow(FluentWindow):
         )
 
     def initWindow(self):
-        self.resize(1100, 750)
-        self.setMinimumWidth(800)
-        self.setMinimumHeight(600)
+        self.resize(1024, 680)
+        self.setMinimumWidth(720)
+        self.setMinimumHeight(520)
         
         # Center the window
         desktop = QApplication.desktop().availableGeometry()
         w, h = desktop.width(), desktop.height()
-        self.move(w//2 - self.width()//2, h//2 - self.height()//2)
+        self.move(max(0, w//2 - self.width()//2), max(0, h//2 - self.height()//2))
 
     def toggle_theme(self):
         if qfluentwidgets.theme() == Theme.DARK:

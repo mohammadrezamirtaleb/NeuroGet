@@ -39,8 +39,8 @@ class UpdateDialog(QDialog):
         self.downloaded_installer_path = ""
 
         self.setWindowTitle(f"{APP_NAME} - Software Update Available")
-        self.setMinimumSize(600, 520)
-        self.resize(640, 560)
+        self.setMinimumSize(540, 440)
+        self.resize(620, 520)
 
         from qfluentwidgets import isDarkTheme
         bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
@@ -50,17 +50,17 @@ class UpdateDialog(QDialog):
 
     def _init_ui(self):
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(28, 24, 28, 24)
+        self.vbox.setContentsMargins(24, 18, 24, 18)
         self.vbox.setSpacing(14)
 
         # 1. Header Card
         header_card = CardWidget(self)
         h_layout = QHBoxLayout(header_card)
         h_layout.setContentsMargins(16, 14, 16, 14)
-        h_layout.setSpacing(16)
+        h_layout.setSpacing(14)
 
         icon_widget = IconWidget(FIF.SYNC, header_card)
-        icon_widget.setFixedSize(38, 38)
+        icon_widget.setFixedSize(36, 36)
         h_layout.addWidget(icon_widget)
 
         title_col = QVBoxLayout()
@@ -71,10 +71,12 @@ class UpdateDialog(QDialog):
         channel = self.update_info.get("channel", "stable").capitalize()
 
         main_title = TitleLabel(f"New {APP_NAME} Update Available!", header_card)
+        main_title.setWordWrap(True)
         version_sub = CaptionLabel(
             f"Current version: v{current_ver}   →   New version: v{latest_ver} ({channel})",
             header_card
         )
+        version_sub.setWordWrap(True)
 
         title_col.addWidget(main_title)
         title_col.addWidget(version_sub)
@@ -129,6 +131,7 @@ class UpdateDialog(QDialog):
         p_layout.setSpacing(8)
 
         self.progress_label = StrongBodyLabel("Downloading update package...", self.progress_card)
+        self.progress_label.setWordWrap(True)
         self.progress_bar = ProgressBar(self.progress_card)
         self.progress_bar.setValue(0)
 

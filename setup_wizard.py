@@ -105,29 +105,31 @@ class SetupWizard(QWidget):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
             
-        self.resize(550, 400)
+        self.resize(520, 420)
+        self.setMinimumSize(460, 360)
         
         # Center
         desktop = QApplication.desktop().availableGeometry()
-        self.move(desktop.width()//2 - self.width()//2, desktop.height()//2 - self.height()//2)
+        self.move(max(0, desktop.width()//2 - self.width()//2), max(0, desktop.height()//2 - self.height()//2))
         self.setStyleSheet("QWidget#SetupWizard { background-color: #202020; }")
         self.setObjectName("SetupWizard")
         
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(40, 40, 40, 40)
-        self.vbox.setSpacing(20)
+        self.vbox.setContentsMargins(32, 24, 32, 24)
+        self.vbox.setSpacing(16)
         
         # Logo
         logo_path = os.path.join(base_path, "assets", "logo_transparent.png")
         if os.path.exists(logo_path):
             self.logo = ImageLabel(logo_path, self)
-            self.logo.setFixedSize(120, 120)
-            self.logo.scaledToWidth(120)
+            self.logo.setFixedSize(100, 100)
+            self.logo.scaledToWidth(100)
             self.logo_layout = QHBoxLayout()
             self.logo_layout.addWidget(self.logo, 0, Qt.AlignCenter)
             self.vbox.addLayout(self.logo_layout)
         
         self.title = SubtitleLabel("Install NeuroGet", self)
+        self.title.setWordWrap(True)
         self.title.setAlignment(Qt.AlignCenter)
         self.vbox.addWidget(self.title)
         
@@ -144,6 +146,7 @@ class SetupWizard(QWidget):
         self.vbox.addLayout(self.path_layout)
         
         self.status = BodyLabel("Ready to install NeuroGet AI Download Manager.", self)
+        self.status.setWordWrap(True)
         self.status.setAlignment(Qt.AlignCenter)
         self.vbox.addWidget(self.status)
         

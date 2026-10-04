@@ -141,12 +141,12 @@ class DownloadCard(CardWidget):
         if enable_renaming:
             self.filename = AIClient._heuristic_clean_name(self.filename)
 
-        self.setFixedHeight(115)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setMinimumHeight(105)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.hBoxLayout = QHBoxLayout(self)
-        self.hBoxLayout.setContentsMargins(20, 16, 20, 16)
-        self.hBoxLayout.setSpacing(16)
+        self.hBoxLayout.setContentsMargins(18, 14, 18, 14)
+        self.hBoxLayout.setSpacing(14)
 
         self._update_icon()
 

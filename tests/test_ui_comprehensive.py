@@ -124,6 +124,18 @@ def test_full_ui_suite():
     finally:
         os.remove(sample_doc)
 
+    print("\n--- 9. Testing Responsiveness & Screen Size Adaptation ---")
+    # Test resizing MainWindow across compact, medium, and wide screen dimensions
+    for width, height in [(720, 520), (800, 600), (1024, 768), (1366, 768), (1920, 1080)]:
+        window.resize(width, height)
+        assert window.width() >= 720
+        assert window.height() >= 520
+        # Ensure scroll areas are present on pages for small viewport scrolling
+        assert hasattr(window.rules_interface, "scroll_area") and window.rules_interface.scroll_area is not None
+        assert hasattr(window.downloads_interface, "scroll_area") and window.downloads_interface.scroll_area is not None
+        assert hasattr(window.settings_interface, "scroll_area") and window.settings_interface.scroll_area is not None
+    print("[PASS] Responsive Screen Adaptation & Scroll Areas OK")
+
     # Clean up test tasks created during test
     from app.models.database import SessionLocal
     from app.models.schemas import DownloadTask

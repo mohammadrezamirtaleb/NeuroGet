@@ -1,13 +1,14 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidgetItem,
-    QHeaderView, QFileDialog, QDialog
+    QHeaderView, QFileDialog, QDialog, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from qfluentwidgets import (
     TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
-    ComboBox, PrimaryPushButton, PushButton, ToolButton, TableWidget,
-    InfoBar, InfoBarPosition, SwitchButton, MessageBox, LineEdit, CardWidget
+    ComboBox, PrimaryPushButton, PushButton, TableWidget,
+    InfoBar, SwitchButton, MessageBox, LineEdit, CardWidget,
+    ScrollArea, IconWidget
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -45,7 +46,8 @@ class AddRuleDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add New Smart Rule")
-        self.resize(520, 400)
+        self.setMinimumSize(480, 380)
+        self.resize(520, 420)
 
         from qfluentwidgets import isDarkTheme
         bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
@@ -76,6 +78,7 @@ class AddRuleDialog(QDialog):
 
         self.vbox.addWidget(StrongBodyLabel("Destination Folder:", self))
         self.dest_layout = QHBoxLayout()
+        self.dest_layout.setSpacing(8)
         self.dest_input = LineEdit(self)
         self.dest_input.setPlaceholderText("Select destination directory...")
         self.dest_input.setClearButtonEnabled(True)
@@ -86,6 +89,7 @@ class AddRuleDialog(QDialog):
         self.vbox.addLayout(self.dest_layout)
 
         self.btn_layout = QHBoxLayout()
+        self.btn_layout.setSpacing(8)
         self.save_btn = PrimaryPushButton("Save Rule", self, FIF.SAVE)
         self.save_btn.clicked.connect(self._validate_and_save)
         self.cancel_btn = PushButton("Cancel", self)
@@ -124,13 +128,30 @@ class SmartRulesPage(QWidget):
         self.setObjectName("SmartRulesPage")
         self.scanner_thread = None
 
-        self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(40, 30, 40, 30)
-        self.vbox.setSpacing(18)
+        # Main root layout
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(28, 20, 28, 20)
+        self.main_layout.setSpacing(12)
 
-        # Header with Master Switch
+        # Smooth Scroll Area for responsive scaling across all screen sizes
+        self.scroll_area = ScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        self.scroll_widget = QWidget()
+        self.scroll_widget.setStyleSheet("QWidget { background: transparent; }")
+        self.scroll_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.vbox = QVBoxLayout(self.scroll_widget)
+        self.vbox.setContentsMargins(0, 0, 12, 16)
+        self.vbox.setSpacing(16)
+
+        # 1. Header with Master Switch
         self.header_layout = QHBoxLayout()
+        self.header_layout.setSpacing(12)
         self.title_label = TitleLabel('AI Smart Rules & Routing', self)
+        self.title_label.setWordWrap(True)
 
         self.enable_ai_switch = SwitchButton(parent=self)
         self.enable_ai_switch.setText('Enable AI Smart Routing')
@@ -138,26 +159,41 @@ class SmartRulesPage(QWidget):
         self.enable_ai_switch.setChecked(is_enabled)
         self.enable_ai_switch.checkedChanged.connect(self._on_switch_changed)
 
-        self.header_layout.addWidget(self.title_label)
-        self.header_layout.addStretch()
-        self.header_layout.addWidget(self.enable_ai_switch)
+        self.header_layout.addWidget(self.title_label, 1)
+        self.header_layout.addWidget(self.enable_ai_switch, 0, Qt.AlignRight | Qt.AlignVCenter)
         self.vbox.addLayout(self.header_layout)
 
         self.desc_label = BodyLabel(
             'Automatically categorize and organize downloads using local or cloud AI models. '
             'Custom rules override default categories.', self
         )
+        self.desc_label.setWordWrap(True)
         self.vbox.addWidget(self.desc_label)
 
-        # AI Provider Selection Card
-        self.provider_card = CardWidget(self)
-        p_layout = QHBoxLayout(self.provider_card)
-        p_layout.setContentsMargins(16, 12, 16, 12)
-        p_layout.setSpacing(12)
+        # 2. AI Provider Selection Card (Structured Fluent Responsive Layout)
+        self.provider_card = CardWidget(self.scroll_widget)
+        p_card_layout = QVBoxLayout(self.provider_card)
+        p_card_layout.setContentsMargins(20, 16, 20, 16)
+        p_card_layout.setSpacing(12)
 
-        self.provider_label = StrongBodyLabel('Active AI Provider:', self.provider_card)
+        # Provider card title header
+        p_header = QHBoxLayout()
+        p_header.setSpacing(10)
+        p_icon = IconWidget(FIF.ROBOT, self.provider_card)
+        p_icon.setFixedSize(20, 20)
+        p_title = StrongBodyLabel('Active AI Provider & Intelligence Model', self.provider_card)
+        p_header.addWidget(p_icon)
+        p_header.addWidget(p_title)
+        p_header.addStretch()
+        p_card_layout.addLayout(p_header)
+
+        # Provider controls row: ComboBox + Action Buttons
+        p_controls_layout = QHBoxLayout()
+        p_controls_layout.setSpacing(10)
+
         self.model_combo = ComboBox(self.provider_card)
-        self.model_combo.setMinimumWidth(320)
+        self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.model_combo.setMinimumWidth(180)
         self.model_combo.currentIndexChanged.connect(self._on_provider_changed)
 
         self.connect_btn = PushButton('Connect API Key', self.provider_card, FIF.LINK)
@@ -166,14 +202,16 @@ class SmartRulesPage(QWidget):
         self.scan_btn = PrimaryPushButton('Scan Local AI', self.provider_card, FIF.SEARCH)
         self.scan_btn.clicked.connect(self.start_scan)
 
-        p_layout.addWidget(self.provider_label)
-        p_layout.addWidget(self.model_combo, 1)
-        p_layout.addWidget(self.connect_btn)
-        p_layout.addWidget(self.scan_btn)
+        p_controls_layout.addWidget(self.model_combo, 1)
+        p_controls_layout.addWidget(self.connect_btn, 0)
+        p_controls_layout.addWidget(self.scan_btn, 0)
+        p_card_layout.addLayout(p_controls_layout)
+
         self.vbox.addWidget(self.provider_card)
 
-        # Rules Table Section
+        # 3. Rules Table Section
         self.table_header_layout = QHBoxLayout()
+        self.table_header_layout.setSpacing(10)
         self.table_label = StrongBodyLabel('Active Auto-Routing Rules', self)
         
         self.add_rule_btn = PrimaryPushButton('Add Rule', self, FIF.ADD)
@@ -188,39 +226,57 @@ class SmartRulesPage(QWidget):
         self.table_header_layout.addWidget(self.del_rule_btn)
         self.vbox.addLayout(self.table_header_layout)
 
-        self.table = TableWidget(self)
+        self.table = TableWidget(self.scroll_widget)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Rule Name', 'Condition', 'Category / Value', 'Destination Folder'])
+        self.table.setMinimumHeight(200)
+        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.table.horizontalHeader().setMinimumSectionSize(90)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.vbox.addWidget(self.table, 1)
+        self.vbox.addWidget(self.table)
 
-        # Interactive Test Routing Section
-        self.test_card = CardWidget(self)
+        # 4. Interactive Test Routing Section
+        self.test_card = CardWidget(self.scroll_widget)
         t_layout = QVBoxLayout(self.test_card)
-        t_layout.setContentsMargins(16, 14, 16, 14)
+        t_layout.setContentsMargins(20, 16, 20, 16)
         t_layout.setSpacing(10)
 
-        t_layout.addWidget(StrongBodyLabel('Interactive Rule & AI Tester', self.test_card))
+        t_header = QHBoxLayout()
+        t_header.setSpacing(10)
+        t_icon = IconWidget(FIF.PLAY, self.test_card)
+        t_icon.setFixedSize(18, 18)
+        t_title = StrongBodyLabel('Interactive Rule & AI Routing Tester', self.test_card)
+        t_header.addWidget(t_icon)
+        t_header.addWidget(t_title)
+        t_header.addStretch()
+        t_layout.addLayout(t_header)
 
         test_input_layout = QHBoxLayout()
+        test_input_layout.setSpacing(10)
         self.test_input = LineEdit(self.test_card)
         self.test_input.setPlaceholderText("Enter a sample URL or filename (e.g. Machine_Learning_Book.pdf or Inception_1080p.mkv)...")
+        self.test_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.test_input.returnPressed.connect(self.run_route_test)
 
         self.test_btn = PrimaryPushButton('Test Routing with AI', self.test_card, FIF.PLAY)
         self.test_btn.clicked.connect(self.run_route_test)
 
         test_input_layout.addWidget(self.test_input, 1)
-        test_input_layout.addWidget(self.test_btn)
+        test_input_layout.addWidget(self.test_btn, 0)
         t_layout.addLayout(test_input_layout)
 
         self.test_result_label = CaptionLabel("Result will appear here...", self.test_card)
+        self.test_result_label.setWordWrap(True)
         t_layout.addWidget(self.test_result_label)
 
         self.vbox.addWidget(self.test_card)
+
+        # Set scroll widget into scroll area and add to root layout
+        self.scroll_area.setWidget(self.scroll_widget)
+        self.main_layout.addWidget(self.scroll_area, 1)
 
         # Cloud Providers List
         self.cloud_providers = [
@@ -358,7 +414,7 @@ class SmartRulesPage(QWidget):
         self.test_btn.setText("Test Routing with AI")
 
         self.test_result_label.setText(
-            f"AI Detected Category: **{res['category']}** | "
-            f"Matched Rule: **{res['matched_rule']}**\n"
-            f"Target Folder: `{res['dest_dir']}`"
+            f"AI Category: {res['category']}  |  "
+            f"Matched Rule: {res['matched_rule']}\n"
+            f"Target Folder: {res['dest_dir']}"
         )

@@ -60,14 +60,14 @@ class AISummaryDialog(QDialog):
         self.chat_worker = None
 
         self.setWindowTitle(f"NeuroGet AI - {self.filename}")
-        self.resize(820, 640)
-        self.setMinimumSize(700, 540)
+        self.resize(800, 600)
+        self.setMinimumSize(620, 460)
 
         # Apply Fluent-compliant theme background
         self._apply_theme_style()
 
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(28, 20, 28, 20)
+        self.vbox.setContentsMargins(24, 18, 24, 18)
         self.vbox.setSpacing(14)
 
         # 1. Header Section
@@ -118,18 +118,20 @@ class AISummaryDialog(QDialog):
 
         # Glowing Fluent Icon Container
         self.icon_card = SimpleCardWidget(self)
-        self.icon_card.setFixedSize(48, 48)
+        self.icon_card.setFixedSize(44, 44)
         icon_layout = QVBoxLayout(self.icon_card)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setAlignment(Qt.AlignCenter)
         self.icon_widget = IconWidget(FIF.ROBOT, self.icon_card)
-        self.icon_widget.setFixedSize(26, 26)
+        self.icon_widget.setFixedSize(24, 24)
         icon_layout.addWidget(self.icon_widget)
 
         self.title_vbox = QVBoxLayout()
         self.title_vbox.setSpacing(2)
         self.title_label = SubtitleLabel(f"AI Document Intelligence: {self.filename}", self)
+        self.title_label.setWordWrap(True)
         self.sub_label = CaptionLabel("Instant semantic summaries, key topic extraction, and interactive document Q&A", self)
+        self.sub_label.setWordWrap(True)
         self.title_vbox.addWidget(self.title_label)
         self.title_vbox.addWidget(self.sub_label)
 
@@ -276,6 +278,7 @@ class AISummaryDialog(QDialog):
         chat_header = QHBoxLayout()
         chat_title = StrongBodyLabel("Interactive File Chat (Mini-RAG)", chat_card)
         chat_desc = CaptionLabel("Ask questions grounded strictly in this document's content", chat_card)
+        chat_desc.setWordWrap(True)
         chat_header.addWidget(chat_title)
         chat_header.addWidget(chat_desc)
         chat_header.addStretch()
@@ -388,6 +391,7 @@ class AISummaryDialog(QDialog):
         self.status_icon = IconWidget(FIF.ACCEPT, self)
         self.status_icon.setFixedSize(16, 16)
         self.status_label = CaptionLabel("Analyzing file content with AI...", self)
+        self.status_label.setWordWrap(True)
 
         self.close_btn = PushButton("Close", self)
         self.close_btn.setFixedWidth(100)
