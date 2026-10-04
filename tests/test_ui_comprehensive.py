@@ -131,6 +131,9 @@ def test_full_ui_suite():
         session.query(DownloadTask).delete()
         session.commit()
 
+    dialog.close()
+    window.close()
+
     print("\n=======================================================")
     print("ALL TABS, BUTTONS, MECHANISMS & WORKERS PASSED 100%!")
     print("=======================================================")

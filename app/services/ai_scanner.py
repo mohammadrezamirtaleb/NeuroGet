@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import requests
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -38,9 +37,6 @@ class LocalAIDetector:
             for cm in cli_models:
                 if cm not in ollama_models:
                     ollama_models.append(cm)
-
-        ollama_path = shutil.which("ollama") or os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe")
-        has_ollama = ollama_online or bool(ollama_models) or (ollama_path and os.path.exists(ollama_path))
 
         if ollama_models:
             status = "Online" if ollama_online else "Installed"

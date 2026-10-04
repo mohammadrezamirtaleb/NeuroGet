@@ -1,10 +1,8 @@
 import os
 import sys
-import shutil
 import hashlib
 import subprocess
-import time
-from app.common.version import UPDATE_DIR, BACKUP_DIR, APP_NAME, __version__
+from app.common.version import UPDATE_DIR, BACKUP_DIR, APP_NAME
 
 class UpdateInstaller:
     """Manages update integrity verification, installer launching, and file backups."""
@@ -66,7 +64,7 @@ class UpdateInstaller:
                 subprocess.Popen([installer_path], start_new_session=True)
 
             return True
-        except Exception as e:
+        except Exception:
             # Fallback to os.startfile on Windows
             try:
                 os.startfile(installer_path)

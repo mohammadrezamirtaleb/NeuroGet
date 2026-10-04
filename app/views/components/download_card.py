@@ -5,10 +5,8 @@ import subprocess
 from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal, QThread
 from PyQt5.QtGui import QFontMetrics
 from PyQt5.QtWidgets import (
-    QWidget,
     QHBoxLayout,
     QVBoxLayout,
-    QFrame,
     QApplication,
     QSizePolicy
 )
@@ -16,17 +14,14 @@ from PyQt5.QtWidgets import (
 from qfluentwidgets import (
     ProgressBar,
     StrongBodyLabel,
-    BodyLabel,
     CaptionLabel,
     ToolButton,
     CardWidget,
     IconWidget,
     PushButton,
-    PrimaryPushButton,
     MessageBox,
     LineEdit,
-    InfoBar,
-    InfoBarPosition
+    InfoBar
 )
 
 from qfluentwidgets import FluentIcon as FIF
@@ -608,28 +603,41 @@ class DownloadCard(CardWidget):
     def cancel_download(self):
         self.db_timer.stop()
         if self.worker is not None:
+            worker = self.worker
+            self.worker = None
             # Disconnect all signals to prevent crash when widget is deleted
+            for sig in (worker.metadata_ready, worker.progress_update, worker.finished, worker.error):
+                try:
+                    sig.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+            worker.cancel()
             try:
-                self.worker.metadata_ready.disconnect()
-                self.worker.progress_update.disconnect()
-                self.worker.finished.disconnect()
-                self.worker.error.disconnect()
+                worker.setParent(None)
+                worker.finished.connect(worker.deleteLater)
             except (TypeError, RuntimeError):
                 pass
-            self.worker.cancel()
-            self.worker.wait(150)
+            worker.wait(150)
 
         # Also stop any running extract worker
         if hasattr(self, 'extract_worker') and self.extract_worker is not None:
+            extract_worker = self.extract_worker
+            self.extract_worker = None
             try:
-                self.extract_worker.finished_extract.disconnect()
+                extract_worker.finished_extract.disconnect()
             except (TypeError, RuntimeError):
                 pass
-            self.extract_worker.cancel()
-            self.extract_worker.wait(100)
+            extract_worker.cancel()
+            try:
+                extract_worker.setParent(None)
+                extract_worker.finished.connect(extract_worker.deleteLater)
+            except (TypeError, RuntimeError):
+                pass
+            extract_worker.wait(100)
 
         if self.task_id:
             update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="error")
 
         self._emit_finished_once()
         self.deleteLater()
+

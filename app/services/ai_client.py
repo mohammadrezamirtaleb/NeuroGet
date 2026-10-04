@@ -17,6 +17,9 @@ class AIClient:
     with automatic, instant heuristic fallbacks.
     """
 
+    _offline_providers = {}  # {provider_key: offline_until_timestamp}
+    _ollama_process_started = False
+
     @classmethod
     def get_configured_provider(cls):
         return get_setting("ai_provider", "Local: Ollama")
@@ -36,6 +39,14 @@ class AIClient:
         api_key = cls.get_api_key()
         model = cls.get_model_name()
 
+        provider_key = provider.lower().strip()
+        now = time.time()
+        if provider_key in cls._offline_providers and now < cls._offline_providers[provider_key]:
+            return None
+
+        # Fast connect timeout tuple: (connect_timeout, read_timeout)
+        fast_timeout = (1.5, timeout) if isinstance(timeout, (int, float)) else timeout
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -51,7 +62,12 @@ class AIClient:
                 else:
                     from app.services.ai_scanner import LocalAIDetector
                     disk_models = LocalAIDetector._scan_ollama_disk_manifests()
-                    ollama_model = disk_models[0] if disk_models else ""
+                    ollama_model = disk_models[0] if disk_models else None
+
+            if not ollama_model:
+                # Do not send empty model to Ollama; mark offline cooldown and fallback immediately
+                cls._offline_providers[provider_key] = time.time() + 60.0
+                return None
 
             full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
             payload = {
@@ -61,10 +77,16 @@ class AIClient:
                 "options": {"temperature": 0.3, "num_predict": max_tokens}
             }
             try:
-                res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=timeout)
+                res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=fast_timeout)
                 if res.status_code == 200:
+                    cls._offline_providers.pop(provider_key, None)
                     return res.json().get("response", "").strip()
             except Exception:
+                pass
+
+            # Try to start ollama serve if not already started
+            if not cls._ollama_process_started:
+                cls._ollama_process_started = True
                 try:
                     import shutil
                     import subprocess
@@ -74,12 +96,16 @@ class AIClient:
                             [ollama_bin, "serve"],
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
                         )
-                        time.sleep(1.5)
-                        res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=timeout)
+                        time.sleep(1.0)
+                        res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=fast_timeout)
                         if res.status_code == 200:
+                            cls._offline_providers.pop(provider_key, None)
                             return res.json().get("response", "").strip()
                 except Exception:
                     pass
+
+            cls._offline_providers[provider_key] = time.time() + 60.0
+            return None
 
         # 2. Local: LM Studio or GPT4All (OpenAI-compatible)
         if "lm studio" in provider.lower() or "gpt4all" in provider.lower():
@@ -90,14 +116,15 @@ class AIClient:
                     "temperature": 0.3,
                     "max_tokens": max_tokens
                 }
-                res = requests.post(f"{host}/chat/completions", json=payload, timeout=timeout)
+                res = requests.post(f"{host}/chat/completions", json=payload, timeout=fast_timeout)
                 if res.status_code == 200:
                     data = res.json()
                     choices = data.get("choices", [])
                     if choices:
+                        cls._offline_providers.pop(provider_key, None)
                         return choices[0].get("message", {}).get("content", "").strip()
             except Exception:
-                pass
+                cls._offline_providers[provider_key] = time.time() + 60.0
 
         # 3. Cloud: OpenAI / OpenRouter / Groq / OpenCode Zen
         if any(p in provider.lower() for p in ["openai", "openrouter", "groq", "opencode", "copilot"]):
@@ -121,14 +148,15 @@ class AIClient:
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
-                res = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
+                res = requests.post(endpoint, json=payload, headers=headers, timeout=fast_timeout)
                 if res.status_code == 200:
                     data = res.json()
                     choices = data.get("choices", [])
                     if choices:
+                        cls._offline_providers.pop(provider_key, None)
                         return choices[0].get("message", {}).get("content", "").strip()
             except Exception:
-                pass
+                cls._offline_providers[provider_key] = time.time() + 60.0
 
         # 4. Cloud: Google Gemini
         if "gemini" in provider.lower() or "google" in provider.lower():
@@ -142,16 +170,17 @@ class AIClient:
                     "contents": [{"parts": [{"text": full_text}]}],
                     "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens}
                 }
-                res = requests.post(url, json=payload, timeout=timeout)
+                res = requests.post(url, json=payload, timeout=fast_timeout)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
                     if candidates:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
+                            cls._offline_providers.pop(provider_key, None)
                             return parts[0].get("text", "").strip()
             except Exception:
-                pass
+                cls._offline_providers[provider_key] = time.time() + 60.0
 
         return None
 
@@ -171,9 +200,7 @@ class AIClient:
                 return "download_file.bin"
 
         # Separate base and extension
-        name_parts = os.path.splitext(raw_name)
-        base_name = name_parts[0]
-        ext = name_parts[1]
+        _, ext = os.path.splitext(raw_name)
 
         # 1. Try AI first if enabled
         prompt = (
@@ -363,7 +390,137 @@ class AIClient:
                 # Find JSON block
                 json_match = re.search(r'\{.*\}', ai_resp, re.DOTALL)
                 if json_match:
-                    return json.loads(json_match.group(0))
+                    parsed = json.loads(json_match.group(0))
+                    if isinstance(parsed, dict) and ("official_url" in parsed or "direct_link_hint" in parsed):
+                        return parsed
             except Exception:
                 pass
-        return None
+
+        # Offline heuristic fallback
+        return cls._heuristic_resolve_download(prompt_text)
+
+    @classmethod
+    def _heuristic_resolve_download(cls, prompt_text):
+        """Offline heuristic lookup for popular software queries."""
+        if not prompt_text:
+            return None
+
+        p_lower = prompt_text.lower().strip()
+
+        # Extract potential version number (e.g. 3.12, 3.12.0)
+        ver_match = re.search(r'\b(\d+(?:\.\d+)+)\b', p_lower)
+        version = ver_match.group(1) if ver_match else None
+
+        # Known software database
+        software_map = [
+            (
+                r'\bpython\b',
+                "Python",
+                f"python-{version or '3.12.2'}-amd64.exe",
+                "https://www.python.org/downloads/",
+                f"https://www.python.org/ftp/python/{version or '3.12.2'}/python-{version or '3.12.2'}-amd64.exe"
+            ),
+            (
+                r'\bvlc\b',
+                "VLC Media Player",
+                f"vlc-{version or '3.0.20'}-win64.exe",
+                "https://www.videolan.org/vlc/",
+                f"https://get.videolan.org/vlc/{version or '3.0.20'}/win64/vlc-{version or '3.0.20'}-win64.exe"
+            ),
+            (
+                r'\b(?:vs\s*code|visual\s*studio\s*code)\b',
+                "Visual Studio Code",
+                "VSCodeUserSetup-x64.exe",
+                "https://code.visualstudio.com/",
+                "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
+            ),
+            (
+                r'\b(?:chrome|google\s*chrome)\b',
+                "Google Chrome",
+                "ChromeSetup.exe",
+                "https://www.google.com/chrome/",
+                "https://dl.google.com/chrome/install/ChromeSetup.exe"
+            ),
+            (
+                r'\bgit\b',
+                "Git",
+                f"Git-{version or '2.44.0'}-64-bit.exe",
+                "https://git-scm.com/downloads",
+                "https://github.com/git-for-windows/git/releases/latest"
+            ),
+            (
+                r'\b(?:node|node\.?js)\b',
+                "Node.js",
+                f"node-v{version or '20.11.1'}-x64.msi",
+                "https://nodejs.org/en/download",
+                f"https://nodejs.org/dist/latest/node-x64.msi"
+            ),
+            (
+                r'\bblender\b',
+                "Blender",
+                f"blender-{version or '4.0.2'}-windows-x64.msi",
+                "https://www.blender.org/download/",
+                "https://www.blender.org/download/"
+            ),
+            (
+                r'\b(?:7[\s-]?zip|7z)\b',
+                "7-Zip",
+                "7z2408-x64.exe",
+                "https://www.7-zip.org/download.html",
+                "https://www.7-zip.org/a/7z2408-x64.exe"
+            ),
+            (
+                r'\b(?:firefox|mozilla\s*firefox)\b',
+                "Mozilla Firefox",
+                "Firefox Installer.exe",
+                "https://www.mozilla.org/firefox/",
+                "https://download.mozilla.org/?product=firefox-stub&os=win64"
+            ),
+            (
+                r'\b(?:obs|obs\s*studio)\b',
+                "OBS Studio",
+                f"OBS-Studio-{version or '30.0.2'}-Full-Installer-x64.exe",
+                "https://obsproject.com/",
+                "https://obsproject.com/download"
+            ),
+            (
+                r'\bnotepad\+\+\b',
+                "Notepad++",
+                "npp.Installer.x64.exe",
+                "https://notepad-plus-plus.org/",
+                "https://notepad-plus-plus.org/downloads/"
+            ),
+            (
+                r'\btelegram\b',
+                "Telegram Desktop",
+                "tsetup.exe",
+                "https://desktop.telegram.org/",
+                "https://telegram.org/dl/desktop/win64"
+            ),
+            (
+                r'\bdiscord\b',
+                "Discord",
+                "DiscordSetup.exe",
+                "https://discord.com/download",
+                "https://discord.com/api/download?platform=win"
+            ),
+        ]
+
+        for pattern, name, filename, url, hint in software_map:
+            if re.search(pattern, p_lower):
+                return {
+                    "software_name": name,
+                    "suggested_filename": filename,
+                    "official_url": url,
+                    "direct_link_hint": hint
+                }
+
+        # Generic heuristic: extract cleaned title
+        clean_words = [w for w in re.split(r'\s+', p_lower) if w not in ('download', 'installer', 'setup', 'for', 'windows', 'pc', 'latest', 'version', 'get', 'the')]
+        app_name = " ".join(clean_words).title() if clean_words else "Requested Application"
+        return {
+            "software_name": app_name,
+            "suggested_filename": f"{app_name.replace(' ', '_')}_Setup.exe",
+            "official_url": f"https://www.google.com/search?q={urllib.parse.quote(prompt_text)}",
+            "direct_link_hint": ""
+        }

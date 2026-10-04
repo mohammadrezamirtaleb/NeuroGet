@@ -57,6 +57,7 @@ class DownloadWorker(QThread):
 
         self._file = None
         self._failure = None
+        self._session = None
 
     def pause(self):
         self.is_paused = True
@@ -71,6 +72,11 @@ class DownloadWorker(QThread):
         self.is_paused = False
         self._cancel_event.set()
         self._pause_event.set()
+        if self._session is not None:
+            try:
+                self._session.close()
+            except Exception:
+                pass
 
     def _wait_active(self):
         while not self._cancel_event.is_set():
@@ -162,6 +168,8 @@ class DownloadWorker(QThread):
             total = content_range.split("/")[-1].strip()
             if total.isdigit():
                 return int(total)
+            if total == "*" or content_range.strip().endswith("/*"):
+                return fallback
 
         content_length = headers.get("Content-Length", str(fallback))
 
@@ -169,6 +177,14 @@ class DownloadWorker(QThread):
             return int(content_length or fallback)
         except Exception:
             return fallback
+
+    def _get_max_threads(self):
+        try:
+            raw = get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS))
+            val = int(raw) if raw is not None else DEFAULT_MAX_SEGMENTS
+            return max(1, val)
+        except (ValueError, TypeError):
+            return DEFAULT_MAX_SEGMENTS
 
     def _emit_progress(self, speed):
         eta = "Unknown"
@@ -222,7 +238,8 @@ class DownloadWorker(QThread):
     def run(self):
         try:
             os.makedirs(self.save_dir, exist_ok=True)
-            session = self._make_session()
+            self._session = self._make_session()
+            session = self._session
 
             probe = None
             normal_response = None
@@ -277,7 +294,15 @@ class DownloadWorker(QThread):
                     )
 
         except Exception as e:
-            self.error.emit(str(e))
+            if not self.is_cancelled:
+                self.error.emit(str(e))
+        finally:
+            if self._session is not None:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+                self._session = None
 
     def _download_single(self, session, response, range_supported=False):
         try:
@@ -344,39 +369,115 @@ class DownloadWorker(QThread):
 
             start_time = time.time()
             bytes_since_start = 0
+            max_retries = 5
+            retries = 0
 
-            with open(self.part_path, mode) as f:
-                for chunk in response.iter_content(CHUNK_SIZE):
+            while True:
+                if self.is_cancelled:
+                    break
+
+                if self.total_size > 0 and self.downloaded_size >= self.total_size:
+                    break
+
+                if not self._wait_active():
+                    break
+
+                stream_error = None
+                try:
+                    with open(self.part_path, mode) as f:
+                        for chunk in response.iter_content(CHUNK_SIZE):
+                            if not self._wait_active():
+                                break
+
+                            if chunk:
+                                f.write(chunk)
+                                n = len(chunk)
+
+                                self.downloaded_size += n
+                                bytes_since_start += n
+
+                                elapsed = time.time() - start_time
+
+                                if elapsed >= 0.5:
+                                    speed = bytes_since_start / elapsed if elapsed > 0 else 0.0
+                                    self._emit_progress(speed)
+
+                                    start_time = time.time()
+                                    bytes_since_start = 0
+
+                                retries = 0
+                except Exception as err:
+                    stream_error = err
+                finally:
+                    if response is not None:
+                        try:
+                            response.close()
+                        except Exception:
+                            pass
+                        response = None
+
+                if self.is_cancelled:
+                    break
+
+                if self.total_size > 0 and self.downloaded_size >= self.total_size:
+                    break
+
+                if stream_error is None and not self.is_paused and self.total_size <= 0:
+                    break
+
+                if not self._wait_active():
+                    break
+
+                if stream_error is not None or (self.total_size > 0 and self.downloaded_size < self.total_size):
+                    retries += 1
+                    if retries > max_retries:
+                        if stream_error and not self.is_cancelled:
+                            raise stream_error
+                        break
+
+                    time.sleep(min(1 * retries, 5))
                     if not self._wait_active():
                         break
 
-                    if chunk:
-                        f.write(chunk)
-                        n = len(chunk)
-
-                        self.downloaded_size += n
-                        bytes_since_start += n
-
-                        elapsed = time.time() - start_time
-
-                        if elapsed >= 0.5:
-                            speed = bytes_since_start / elapsed if elapsed > 0 else 0.0
-                            self._emit_progress(speed)
-
-                            start_time = time.time()
-                            bytes_since_start = 0
-
-            response.close()
+                    headers = {"Range": f"bytes={self.downloaded_size}-"}
+                    try:
+                        response = self._open_stream(session, headers)
+                        if response.status_code == 206:
+                            range_supported = True
+                            mode = "ab"
+                            continue
+                        elif response.status_code == 200:
+                            if not range_supported and self.downloaded_size == 0:
+                                mode = "wb"
+                                continue
+                            else:
+                                response.close()
+                                response = None
+                                raise Exception("Server does not support resuming range requests")
+                        else:
+                            status = response.status_code
+                            response.close()
+                            response = None
+                            raise Exception(f"Server returned HTTP {status} on reconnect")
+                    except Exception as conn_err:
+                        if self.is_cancelled:
+                            break
+                        if retries >= max_retries:
+                            raise conn_err
+                        continue
+                else:
+                    break
 
             if self.is_cancelled:
-                self.error.emit("Download cancelled.")
+                pass
             elif self.total_size > 0 and self.downloaded_size < self.total_size:
                 self.error.emit("Connection lost. Download incomplete.")
             else:
                 self._finalize()
 
         except Exception as e:
-            self.error.emit(str(e))
+            if not self.is_cancelled:
+                self.error.emit(str(e))
 
     def _load_or_create_segments(self):
         segments = []
@@ -407,7 +508,7 @@ class DownloadWorker(QThread):
                 except Exception:
                     pass
 
-            max_threads = int(get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS)))
+            max_threads = self._get_max_threads()
             segment_count = min(
                 max_threads,
                 max(1, int(self.total_size // MIN_SEGMENT_SIZE))
@@ -437,7 +538,19 @@ class DownloadWorker(QThread):
                 start = end + 1
 
         if not os.path.exists(self.part_path):
-            open(self.part_path, "wb").close()
+            with open(self.part_path, "wb") as f:
+                if self.total_size > 0:
+                    try:
+                        f.truncate(self.total_size)
+                    except OSError:
+                        pass
+        elif self.total_size > 0:
+            try:
+                if os.path.getsize(self.part_path) < self.total_size:
+                    with open(self.part_path, "r+b") as f:
+                        f.truncate(self.total_size)
+            except OSError:
+                pass
 
         self.downloaded_size = sum(int(s[2]) for s in segments)
         return segments
@@ -467,21 +580,29 @@ class DownloadWorker(QThread):
         self._save_meta(segments)
 
         self._failure = None
-        self._file = open(self.part_path, "r+b")
-
-        max_threads = int(get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS)))
-        workers = min(max_threads, max(1, len(segments)))
-        executor = ThreadPoolExecutor(max_workers=workers)
-
-        futures = [
-            executor.submit(self._segment_worker, session, seg)
-            for seg in segments
-        ]
-
-        last_time = time.time()
-        last_bytes = self.downloaded_size
+        self._file = None
+        executor = None
 
         try:
+            self._file = open(self.part_path, "r+b")
+            if self.total_size > 0:
+                try:
+                    self._file.truncate(self.total_size)
+                except OSError:
+                    pass
+
+            max_threads = self._get_max_threads()
+            workers = min(max_threads, max(1, len(segments)))
+            executor = ThreadPoolExecutor(max_workers=workers)
+
+            futures = [
+                executor.submit(self._segment_worker, session, seg)
+                for seg in segments
+            ]
+
+            last_time = time.time()
+            last_bytes = self.downloaded_size
+
             while True:
                 if self.is_cancelled:
                     break
@@ -517,11 +638,15 @@ class DownloadWorker(QThread):
                 try:
                     f.result()
                 except Exception as e:
-                    if not self._failure:
+                    if not self._failure and not self.is_cancelled:
                         self._failure = str(e)
 
         finally:
-            executor.shutdown(wait=True, cancel_futures=True)
+            if executor is not None:
+                try:
+                    executor.shutdown(wait=True, cancel_futures=True)
+                except Exception:
+                    pass
 
             if self._file:
                 try:
@@ -529,13 +654,12 @@ class DownloadWorker(QThread):
                     self._file.close()
                 except Exception:
                     pass
-
                 self._file = None
 
-        if self._failure:
+        if self._failure and not self.is_cancelled:
             self.error.emit(self._failure)
         elif self.is_cancelled:
-            self.error.emit("Download cancelled.")
+            pass
         elif self.total_size > 0 and self.downloaded_size < self.total_size:
             self.error.emit("Connection lost. Download incomplete.")
         else:
@@ -549,6 +673,9 @@ class DownloadWorker(QThread):
 
         for attempt in range(retries):
             if self.is_cancelled:
+                return False
+
+            if not self._wait_active():
                 return False
 
             with self._state_lock:
@@ -587,8 +714,9 @@ class DownloadWorker(QThread):
                             chunk = chunk[:remaining]
 
                         with self._file_lock:
-                            self._file.seek(pos)
-                            self._file.write(chunk)
+                            if self._file and not self._file.closed:
+                                self._file.seek(pos)
+                                self._file.write(chunk)
 
                         n = len(chunk)
                         pos += n
@@ -601,7 +729,8 @@ class DownloadWorker(QThread):
 
             except Exception as e:
                 if attempt == retries - 1 or self.is_cancelled:
-                    self._failure = str(e)
+                    if not self.is_cancelled:
+                        self._failure = str(e)
                     self.cancel()
                     return False
 

@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import requests
 from urllib.parse import urlparse
-from app.services.ai_client import AIClient
 
 class PasswordFinder:
     """Intelligently discovers archive extraction passwords from URLs, filenames,
@@ -98,20 +97,33 @@ class PasswordFinder:
         found = []
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            res = requests.get(webpage_url, headers=headers, timeout=3)
-            if res.status_code == 200:
-                html = res.text
-                # Look for common Persian and English password indicators
-                patterns = [
-                    r'(?:رمز\s*فایل|پسورد|رمز|Password|Pass)\s*[:：\-]\s*([^\s<>"\'&]+)',
-                    r'class=[\'"][^\'"]*pass[^\'"]*[\'"][^>]*>([^<]+)<',
-                ]
-                for p in patterns:
-                    matches = re.findall(p, html, re.IGNORECASE)
-                    for m in matches:
-                        cleaned = m.strip().strip(':：- ')
-                        if cleaned and len(cleaned) < 50 and not cleaned.startswith(('http', 'www.' + 'google')):
-                            found.append(cleaned)
+            with requests.get(webpage_url, headers=headers, stream=True, timeout=3) as res:
+                if res.status_code == 200:
+                    content_type = res.headers.get("Content-Type", "").lower()
+                    if "text/html" not in content_type:
+                        return []
+
+                    raw_chunk = bytearray()
+                    for chunk in res.iter_content(chunk_size=8192):
+                        raw_chunk.extend(chunk)
+                        if len(raw_chunk) >= 65536:
+                            raw_chunk = raw_chunk[:65536]
+                            break
+
+                    encoding = res.encoding or "utf-8"
+                    html = raw_chunk.decode(encoding, errors="replace")
+
+                    # Look for common Persian and English password indicators
+                    patterns = [
+                        r'(?:رمز\s*فایل|پسورد|رمز|Password|Pass)\s*[:：\-]\s*([^\s<>"\'&]+)',
+                        r'class=[\'"][^\'"]*pass[^\'"]*[\'"][^>]*>([^<]+)<',
+                    ]
+                    for p in patterns:
+                        matches = re.findall(p, html, re.IGNORECASE)
+                        for m in matches:
+                            cleaned = m.strip().strip(':：- ')
+                            if cleaned and len(cleaned) < 50 and not cleaned.startswith(('http', 'www.' + 'google')):
+                                found.append(cleaned)
         except Exception:
             pass
         return found
@@ -128,8 +140,8 @@ class PasswordFinder:
             folder_name = os.path.splitext(os.path.basename(archive_path))[0]
             output_dir = os.path.join(base_dir, folder_name)
 
-        output_dir = os.path.abspath(output_dir)
-        os.makedirs(output_dir, exist_ok=True)
+        real_out = os.path.realpath(os.path.abspath(output_dir))
+        os.makedirs(real_out, exist_ok=True)
         passwords_to_try = [None, ""] + (candidate_passwords or [])
         ext = os.path.splitext(archive_path)[1].lower()
 
@@ -144,17 +156,21 @@ class PasswordFinder:
                     with zipfile.ZipFile(archive_path, 'r') as zf:
                         # Zip Slip Protection: Validate all member paths before extracting
                         for member in zf.infolist():
-                            member_target = os.path.abspath(os.path.join(output_dir, member.filename))
-                            if not member_target.startswith(output_dir + os.sep) and member_target != output_dir:
+                            member_target = os.path.realpath(os.path.join(real_out, member.filename))
+                            try:
+                                common = os.path.commonpath([real_out, member_target])
+                            except ValueError:
+                                return {"success": False, "message": f"Security alert: Zip Slip directory traversal blocked ({member.filename})"}
+                            if common != real_out:
                                 return {"success": False, "message": f"Security alert: Zip Slip directory traversal blocked ({member.filename})"}
 
-                        zf.extractall(path=output_dir, pwd=pwd_bytes)
+                        zf.extractall(path=real_out, pwd=pwd_bytes)
 
                     return {
                         "success": True,
                         "password_used": pwd or "(No password)",
-                        "output_dir": output_dir,
-                        "message": f"Successfully extracted to {output_dir}"
+                        "output_dir": real_out,
+                        "message": f"Successfully extracted to {real_out}"
                     }
                 except zipfile.BadZipFile:
                     return {"success": False, "message": "Corrupted archive or invalid ZIP format."}
@@ -171,19 +187,42 @@ class PasswordFinder:
                     # Tar Slip Protection: Validate members against directory traversal
                     safe_members = []
                     for member in tf.getmembers():
-                        member_target = os.path.abspath(os.path.join(output_dir, member.name))
-                        if member_target.startswith(output_dir + os.sep) or member_target == output_dir:
-                            safe_members.append(member)
-                        else:
+                        # Block character devices, block devices, and FIFOs
+                        if member.ischr() or member.isblk() or member.isfifo():
+                            continue
+                        if not (member.isreg() or member.isdir() or member.issym() or member.islnk()):
+                            continue
+
+                        member_target = os.path.realpath(os.path.join(real_out, member.name))
+                        try:
+                            common = os.path.commonpath([real_out, member_target])
+                        except ValueError:
+                            return {"success": False, "message": f"Security alert: Tar Slip directory traversal blocked ({member.name})"}
+                        if common != real_out:
                             return {"success": False, "message": f"Security alert: Tar Slip directory traversal blocked ({member.name})"}
 
-                    tf.extractall(path=output_dir, members=safe_members)
+                        # Validate link targets for symlinks and hardlinks
+                        if member.issym() or member.islnk():
+                            link_target = os.path.realpath(os.path.join(os.path.dirname(member_target), member.linkname))
+                            try:
+                                common_link = os.path.commonpath([real_out, link_target])
+                            except ValueError:
+                                return {"success": False, "message": f"Security alert: Tar Slip link traversal blocked ({member.name} -> {member.linkname})"}
+                            if common_link != real_out:
+                                return {"success": False, "message": f"Security alert: Tar Slip link traversal blocked ({member.name} -> {member.linkname})"}
+
+                        safe_members.append(member)
+
+                    if hasattr(tarfile, 'data_filter'):
+                        tf.extractall(path=real_out, members=safe_members, filter='data')
+                    else:
+                        tf.extractall(path=real_out, members=safe_members)
 
                 return {
                     "success": True,
                     "password_used": "(No password)",
-                    "output_dir": output_dir,
-                    "message": f"Successfully extracted to {output_dir}"
+                    "output_dir": real_out,
+                    "message": f"Successfully extracted to {real_out}"
                 }
             except Exception as e:
                 return {"success": False, "message": str(e)}
@@ -198,15 +237,36 @@ class PasswordFinder:
                     if is_cancelled and is_cancelled():
                         return {"success": False, "message": "Extraction cancelled."}
 
-                    cmd = [seven_zip, 'x', f'-p{pwd or ""}', '-y', f'-o{output_dir}', archive_path]
-                    proc = subprocess.run(cmd, capture_output=True)
-                    if proc.returncode == 0:
-                        return {
-                            "success": True,
-                            "password_used": pwd or "(No password)",
-                            "output_dir": output_dir,
-                            "message": f"Successfully extracted using 7-Zip to {output_dir}"
-                        }
+                    cmd = [seven_zip, 'x', f'-p{pwd or ""}', '-y', f'-o{real_out}', archive_path]
+                    try:
+                        proc = subprocess.run(cmd, capture_output=True, timeout=60)
+                        if proc.returncode == 0:
+                            return {
+                                "success": True,
+                                "password_used": pwd or "(No password)",
+                                "output_dir": real_out,
+                                "message": f"Successfully extracted using 7-Zip to {real_out}"
+                            }
+                    except subprocess.TimeoutExpired:
+                        return {"success": False, "message": "Extraction timed out after 60 seconds."}
+
+            elif winrar:
+                for pwd in passwords_to_try:
+                    if is_cancelled and is_cancelled():
+                        return {"success": False, "message": "Extraction cancelled."}
+
+                    cmd = [winrar, 'x', '-ibck', '-y', f'-p{pwd or ""}', archive_path, f'{real_out}\\']
+                    try:
+                        proc = subprocess.run(cmd, capture_output=True, timeout=60)
+                        if proc.returncode == 0:
+                            return {
+                                "success": True,
+                                "password_used": pwd or "(No password)",
+                                "output_dir": real_out,
+                                "message": f"Successfully extracted using WinRAR to {real_out}"
+                            }
+                    except subprocess.TimeoutExpired:
+                        return {"success": False, "message": "Extraction timed out after 60 seconds."}
 
         return {
             "success": False,
