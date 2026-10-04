@@ -42,6 +42,10 @@ class UpdateDialog(QDialog):
         self.setMinimumSize(600, 520)
         self.resize(640, 560)
 
+        from qfluentwidgets import isDarkTheme
+        bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
+        self.setStyleSheet(f"UpdateDialog {{ background-color: {bg_color}; }}")
+
         self._init_ui()
 
     def _init_ui(self):

@@ -59,6 +59,11 @@ class AISummaryDialog(QDialog):
         self.resize(750, 580)
         self.setMinimumSize(650, 480)
 
+        # Apply correct background color for the theme to fix unreadable text
+        from qfluentwidgets import isDarkTheme
+        bg_color = "rgb(32, 32, 32)" if isDarkTheme() else "rgb(243, 243, 243)"
+        self.setStyleSheet(f"AISummaryDialog {{ background-color: {bg_color}; }}")
+
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(28, 24, 28, 24)
         self.vbox.setSpacing(16)
@@ -135,6 +140,7 @@ class AISummaryDialog(QDialog):
         self.summary_text = TextEdit(self.summary_card)
         self.summary_text.setReadOnly(True)
         self.summary_text.setPlaceholderText("Generating AI insights...")
+        self.summary_text.setStyleSheet("TextEdit, QTextEdit { border: none; background-color: transparent; }")
         card_layout.addWidget(self.summary_text)
 
         vbox.addWidget(self.summary_card, 1)
@@ -149,6 +155,7 @@ class AISummaryDialog(QDialog):
         self.chat_history = TextEdit(w)
         self.chat_history.setReadOnly(True)
         self.chat_history.setPlaceholderText("Ask any question about this document and get instant answers...")
+        self.chat_history.setStyleSheet("TextEdit, QTextEdit { border: none; background-color: transparent; }")
         vbox.addWidget(self.chat_history, 1)
 
         input_layout = QHBoxLayout()
@@ -172,6 +179,7 @@ class AISummaryDialog(QDialog):
 
         self.meta_text = TextEdit(w)
         self.meta_text.setReadOnly(True)
+        self.meta_text.setStyleSheet("TextEdit, QTextEdit { border: none; background-color: transparent; }")
         vbox.addWidget(self.meta_text, 1)
 
         return w
