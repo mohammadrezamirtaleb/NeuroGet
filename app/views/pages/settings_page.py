@@ -8,7 +8,7 @@ from qfluentwidgets import (
     TitleLabel, SubtitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel, LineEdit,
     PushButton, PrimaryPushButton, TransparentPushButton, CheckBox, SwitchButton,
     SpinBox, MessageBox, InfoBar, CardWidget, SimpleCardWidget,
-    ComboBox, ScrollArea, IconWidget, isDarkTheme, SmoothMode
+    ComboBox, ScrollArea, IconWidget, isDarkTheme, SmoothMode, setCustomStyleSheet
 )
 from qfluentwidgets import FluentIcon as FIF
 
@@ -132,15 +132,19 @@ class SettingsPage(QWidget):
         self.path_layout.setSpacing(12)
         self.path_input = LineEdit(self.storage_card)
         self.path_input.setReadOnly(True)
-        self.path_input.setMinimumHeight(36)
+        self.path_input.setMinimumHeight(44)
         self.path_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        light_input_qss = "LineEdit { border-bottom: 1px solid rgba(0, 0, 0, 19); }"
+        dark_input_qss = "LineEdit { border-bottom: 1px solid rgba(255, 255, 255, 21); }"
+        setCustomStyleSheet(self.path_input, light_input_qss, dark_input_qss)
 
         self.path_btn = PushButton('Change Folder', self.storage_card, FIF.FOLDER)
-        self.path_btn.setMinimumHeight(36)
+        self.path_btn.setMinimumHeight(44)
         self.path_btn.clicked.connect(self.choose_download_dir)
 
         self.open_folder_btn = PushButton('Open in Explorer', self.storage_card, FIF.FOLDER_ADD)
-        self.open_folder_btn.setMinimumHeight(36)
+        self.open_folder_btn.setMinimumHeight(44)
         self.open_folder_btn.clicked.connect(self._open_current_download_dir)
 
         self.path_layout.addWidget(self.path_input, 1)

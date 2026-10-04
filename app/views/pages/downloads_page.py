@@ -31,6 +31,7 @@ from qfluentwidgets import (
     SimpleCardWidget,
     IconWidget,
     SegmentedWidget,
+    Pivot,
     PillPushButton,
     SmoothMode,
     setCustomStyleSheet
@@ -123,17 +124,17 @@ class DownloadsPage(QWidget):
     def _build_input_area(self):
         self.input_card = CardWidget(self)
         input_card_layout = QHBoxLayout(self.input_card)
-        input_card_layout.setContentsMargins(18, 14, 18, 14)
-        input_card_layout.setSpacing(12)
+        input_card_layout.setContentsMargins(24, 20, 24, 20)
+        input_card_layout.setSpacing(14)
 
         # Quick AI / Download Icon
         input_icon = IconWidget(FIF.ROBOT, self.input_card)
-        input_icon.setFixedSize(24, 24)
+        input_icon.setFixedSize(28, 28)
         input_card_layout.addWidget(input_icon)
 
         self.url_input = LineEdit(self.input_card)
         self.url_input.setPlaceholderText("Paste URL (HTTP/HTTPS/FTP) or ask AI (e.g. 'download python 3.12 installer')...")
-        self.url_input.setMinimumHeight(40)
+        self.url_input.setMinimumHeight(44)
         self.url_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.url_input.setClearButtonEnabled(True)
         self.url_input.returnPressed.connect(self.add_download)
@@ -142,12 +143,13 @@ class DownloadsPage(QWidget):
         # Paste Clipboard Quick Button
         self.btn_paste_clip = ToolButton(FIF.PASTE, self.input_card)
         self.btn_paste_clip.setToolTip("Paste from Clipboard")
+        self.btn_paste_clip.setFixedSize(44, 44)
         self.btn_paste_clip.clicked.connect(self._paste_from_clipboard)
         input_card_layout.addWidget(self.btn_paste_clip)
 
         # Main Download Button
         self.add_btn = PrimaryPushButton('Download', self.input_card, FIF.DOWNLOAD)
-        self.add_btn.setMinimumHeight(40)
+        self.add_btn.setMinimumHeight(44)
         self.add_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.add_btn.clicked.connect(self.add_download)
         input_card_layout.addWidget(self.add_btn)
@@ -157,9 +159,9 @@ class DownloadsPage(QWidget):
     def _build_toolbar(self):
         # Row 1: Filter Segmented Widget & Search LineEdit
         top_filter_row = QHBoxLayout()
-        top_filter_row.setSpacing(14)
+        top_filter_row.setSpacing(24)
 
-        self.filter_pivot = SegmentedWidget(self)
+        self.filter_pivot = Pivot(self)
         self.filter_pivot.addItem('all', 'All Tasks', onClick=lambda: self._set_filter('all'))
         self.filter_pivot.addItem('downloading', 'Downloading', onClick=lambda: self._set_filter('downloading'))
         self.filter_pivot.addItem('completed', 'Completed', onClick=lambda: self._set_filter('completed'))
@@ -170,9 +172,15 @@ class DownloadsPage(QWidget):
         self.search_input.setPlaceholderText("Search tasks by name or URL...")
         self.search_input.setMinimumWidth(150)
         self.search_input.setMaximumWidth(280)
+        self.search_input.setMinimumHeight(38)
         self.search_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._on_search_changed)
+
+        light_input_qss = "LineEdit, SearchLineEdit { border-bottom: 1px solid rgba(0, 0, 0, 19); }"
+        dark_input_qss = "LineEdit, SearchLineEdit { border-bottom: 1px solid rgba(255, 255, 255, 21); }"
+        setCustomStyleSheet(self.url_input, light_input_qss, dark_input_qss)
+        setCustomStyleSheet(self.search_input, light_input_qss, dark_input_qss)
 
         top_filter_row.addWidget(self.filter_pivot, 1)
         top_filter_row.addWidget(self.search_input, 0)

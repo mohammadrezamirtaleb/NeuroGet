@@ -37,30 +37,19 @@ class MainWindow(FluentWindow):
 
         self.initWindow()
 
-        # Remove default borders and divider lines
-        self.stackedWidget.setStyleSheet("StackedWidget { border: none; background: transparent; }")
-        self.navigationInterface.setStyleSheet("NavigationInterface { border: none; background: transparent; }")
-        self.navigationInterface.panel.setStyleSheet("""
-            NavigationPanel {
-                border: none;
-            }
-            NavigationPanel[menu=true] {
-                background-color: rgb(32, 32, 32);
-                border: none;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
-            }
-            NavigationPanel[menu=false] {
-                background-color: transparent;
-                border: none;
-            }
-        """)
 
-        # Create Pages
+        # Create Pages (yield to event loop so splash screen animation continues)
         self.downloads_interface = DownloadsPage(self)
+        QApplication.processEvents()
+        
         self.rules_interface = SmartRulesPage(self)
+        QApplication.processEvents()
+        
         self.settings_interface = SettingsPage(self)
+        QApplication.processEvents()
+        
         self.about_interface = AboutPage(self)
+        QApplication.processEvents()
 
         self.initNavigation()
 
@@ -238,23 +227,25 @@ if __name__ == '__main__':
     splash = NeuroSplashScreen(resource_path('assets/logo_transparent.png'))
     splash.start()
     
-    # Main Window (pre-warmed and revealed smoothly on splash finish)
+    # Main Window will be created after splash progress completes
     w = None
+    
+    def on_splash_progress_completed():
+        global w
+        # Initialize MainWindow. processEvents() inside will keep the splash animating.
+        w = MainWindow()
+        
+        # After MainWindow is fully loaded in memory, tell splash to fade out
+        splash.finish_splash()
+        
+    # Start loading MainWindow shortly after the event loop starts
+    QTimer.singleShot(150, on_splash_progress_completed)
     
     def on_splash_finished():
         global w
-        if w is None:
-            w = MainWindow()
-        w.show()
-        
-    splash.finished.connect(on_splash_finished)
-    
-    def prewarm_main_window():
-        global w
-        if w is None:
-            w = MainWindow()
+        if w is not None:
+            w.show()
             
-    # Initialize MainWindow while splash animation is actively rendering
-    QTimer.singleShot(150, prewarm_main_window)
+    splash.finished.connect(on_splash_finished)
     
     sys.exit(app.exec_())

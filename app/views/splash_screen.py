@@ -12,6 +12,7 @@ from app.common.version import APP_NAME, __version__
 
 class NeuroSplashScreen(QWidget):
     finished = pyqtSignal()
+    progressCompleted = pyqtSignal()
 
     def __init__(self, logo_path=None, parent=None):
         super().__init__(parent)
@@ -47,17 +48,17 @@ class NeuroSplashScreen(QWidget):
         shadow.setOffset(0, 12)
         self.setGraphicsEffect(shadow)
 
-        # 60 FPS incremental progress timer (guarantees silky smooth motion on every device)
-        self._anim_timer = QTimer(self)
-        self._anim_timer.setInterval(16)  # ~60 FPS
-        self._anim_timer.timeout.connect(self._on_anim_step)
-
         # Opacity Fade-in Animation
         self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
         self.fade_anim.setDuration(240)
         self.fade_anim.setStartValue(0.0)
         self.fade_anim.setEndValue(1.0)
         self.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        # 60 FPS incremental progress timer (guarantees silky smooth motion on every device)
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(16)  # ~60 FPS
+        self._anim_timer.timeout.connect(self._on_anim_step)
 
         # Center on primary screen
         screen = QApplication.primaryScreen()
@@ -90,25 +91,13 @@ class NeuroSplashScreen(QWidget):
         self._anim_timer.start()
 
     def _on_anim_step(self):
-        # Guaranteed progressive fill across ~70 smooth frames
-        if self._progress < 0.25:
-            step = 0.014  # Smooth takeoff
-        elif self._progress < 0.70:
-            step = 0.020  # Fast linear glide through middle
-        elif self._progress < 0.92:
-            step = 0.014  # Smooth approach
-        else:
-            step = 0.008  # Gentle finish to exactly 100%
+        # Continuous smooth rotation for the spinner
+        self._progress = (self._progress + 0.02) % 1.0
+        self._total_time = getattr(self, '_total_time', 0.0) + 0.016
+        self.repaint()
 
-        self._progress = min(1.0, self._progress + step)
-        self.update()
-
-        if self._progress >= 1.0:
-            self._anim_timer.stop()
-            # Hold at 100% briefly so user sees completion, then finish
-            QTimer.singleShot(220, self._start_finish)
-
-    def _start_finish(self):
+    def finish_splash(self):
+        # Triggered by main.py after MainWindow is initialized
         if self._is_closing:
             return
         self._is_closing = True
@@ -139,16 +128,17 @@ class NeuroSplashScreen(QWidget):
 
     def set_loading_progress(self, value):
         self._progress = max(0.0, min(1.0, value))
-        self.update()
+        self.repaint()
 
     loadingProgress = pyqtProperty(float, get_loading_progress, set_loading_progress)
 
     def _get_dynamic_status(self):
-        if self._progress < 0.25:
+        t = getattr(self, '_total_time', 0.0)
+        if t < 0.6:
             return "Initializing neural acceleration core..."
-        elif self._progress < 0.55:
+        elif t < 1.5:
             return "Optimizing multi-segment download streams..."
-        elif self._progress < 0.85:
+        elif t < 2.5:
             return "Loading smart rules & AI routing..."
         else:
             return "System ready • Launching workspace..."
@@ -263,58 +253,45 @@ class NeuroSplashScreen(QWidget):
         painter.setPen(QColor(60, 195, 255))
         painter.drawText(badge_rect, Qt.AlignCenter, badge_text)
 
-        # --- 6. Dynamic Status Text & Percentage Row ---
-        bar_w = 320.0
-        bar_h = 5.0
-        bar_x = card_rect.left() + (self.card_w - bar_w) / 2.0
-        bar_y = card_rect.top() + 372.0
-
+        # --- 6. Dynamic Status Text ---
+        status_text = self._get_dynamic_status()
+        
         status_font = QFont("Segoe UI", 9)
         status_font.setStyleStrategy(QFont.PreferAntialias)
         painter.setFont(status_font)
+        
+        # Center the status text
+        painter.setPen(QColor(155, 162, 180, 220))
+        status_rect = QRectF(card_rect.left(), card_rect.bottom() - 65.0, self.card_w, 20.0)
+        painter.drawText(status_rect, Qt.AlignCenter, status_text)
 
-        # Left: Status description
-        painter.setPen(QColor(155, 162, 180))
-        status_rect = QRectF(bar_x, bar_y - 24.0, bar_w - 45.0, 18.0)
-        painter.drawText(status_rect, Qt.AlignLeft | Qt.AlignVCenter, self._get_dynamic_status())
-
-        # Right: Progress percentage
-        pct_font = QFont("Segoe UI", 9, QFont.Bold)
-        pct_font.setStyleStrategy(QFont.PreferAntialias)
-        painter.setFont(pct_font)
-        painter.setPen(QColor(60, 195, 255))
-        pct_rect = QRectF(bar_x + bar_w - 45.0, bar_y - 24.0, 45.0, 18.0)
-        painter.drawText(pct_rect, Qt.AlignRight | Qt.AlignVCenter, f"{int(self._progress * 100)}%")
-
-        # --- 7. Glowing Fluid Progress Bar ---
-        bar_track_rect = QRectF(bar_x, bar_y, bar_w, bar_h)
-
-        # Track
-        track_path = QPainterPath()
-        track_path.addRoundedRect(bar_track_rect, 2.5, 2.5)
-        painter.fillPath(track_path, QColor(255, 255, 255, 20))
-
-        # Fill with Vibrant Solar-to-Cyan Gradient
-        fill_w = max(0.0, min(bar_w, bar_w * self._progress))
-        if fill_w > 0:
-            fill_rect = QRectF(bar_x, bar_y, fill_w, bar_h)
-            fill_path = QPainterPath()
-            fill_path.addRoundedRect(fill_rect, 2.5, 2.5)
-
-            bar_grad = QLinearGradient(bar_x, bar_y, bar_x + bar_w, bar_y)
-            bar_grad.setColorAt(0.0, QColor(255, 120, 0))   # Warm Orange
-            bar_grad.setColorAt(0.5, QColor(255, 180, 0))   # Gold
-            bar_grad.setColorAt(1.0, QColor(0, 200, 255))   # Electric Cyan
-            painter.fillPath(fill_path, bar_grad)
-
-            # Glowing Laser Tip at head of progress
-            tip_x = bar_x + fill_w
-            tip_y = bar_y + bar_h / 2.0
-            tip_glow = QRadialGradient(QPointF(tip_x, tip_y), 9.0)
-            tip_glow.setColorAt(0.0, QColor(0, 225, 255, 230))
-            tip_glow.setColorAt(0.4, QColor(0, 200, 255, 120))
-            tip_glow.setColorAt(1.0, QColor(0, 200, 255, 0))
-            painter.fillRect(QRectF(tip_x - 9, tip_y - 9, 18, 18), QBrush(tip_glow))
+        # --- 7. Elegant Animated Spinner (replaces progress bar) ---
+        spinner_size = 28.0
+        spinner_rect = QRectF(card_rect.center().x() - spinner_size/2.0, card_rect.bottom() - 110.0, spinner_size, spinner_size)
+        
+        # Background subtle ring
+        pen_bg = QPen(QColor(255, 255, 255, 15), 2.5)
+        painter.setPen(pen_bg)
+        painter.drawEllipse(spinner_rect)
+        
+        # Rotating gradient arc
+        pen_fg = QPen(QColor(0, 200, 255), 2.5)
+        pen_fg.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen_fg)
+        
+        # Calculate angle based on progress (0 to 1.0 -> 0 to 360 * 4 rotations)
+        # 16 is Qt's angle unit (1/16th of a degree).
+        start_angle = int(-self._progress * 360 * 4 * 16) 
+        span_angle = int(100 * 16) # 100 degrees arc length
+        painter.drawArc(spinner_rect, start_angle, span_angle)
+        
+        # Second complementary arc (Orange/Gold)
+        pen_fg2 = QPen(QColor(255, 150, 0), 2.5)
+        pen_fg2.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen_fg2)
+        start_angle2 = int(-self._progress * 360 * 4 * 16) + int(180 * 16)
+        span_angle2 = int(60 * 16) # 60 degrees arc length
+        painter.drawArc(spinner_rect, start_angle2, span_angle2)
 
         painter.restore()
 
