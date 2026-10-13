@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtCore import Qt, QSize, QTimer, QThread
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 
@@ -126,6 +126,8 @@ class MainWindow(FluentWindow):
         )
 
     def check_updates_on_startup(self):
+        if getattr(self, '_closing', False):
+            return
         is_auto_check = get_setting("auto_check_updates", "true").lower() in ("true", "1", "yes")
         if not is_auto_check:
             return
@@ -142,6 +144,19 @@ class MainWindow(FluentWindow):
 
     def closeEvent(self, event):
         """Gracefully shut down all background threads without blocking the main UI thread."""
+        from app.common.workers import retired_workers
+        self._closing = True
+        workers = set(self.findChildren(QThread)) | set(retired_workers)
+        if any(worker.isRunning() for worker in workers):
+            event.ignore()
+            self.setEnabled(False)
+            for worker in workers:
+                if hasattr(worker, 'cancel'):
+                    worker.cancel()
+                worker.requestInterruption()
+                worker.quit()
+            QTimer.singleShot(100, self.close)
+            return
         # Cancel all active download workers in DownloadsPage
         if hasattr(self, 'downloads_interface'):
             layout = self.downloads_interface.scroll_layout

@@ -2,10 +2,45 @@ import os
 import sys
 import hashlib
 import subprocess
+import tempfile
+import shutil
+import zipfile
+import uuid
 from app.common.version import UPDATE_DIR, BACKUP_DIR, APP_NAME
 
 class UpdateInstaller:
     """Manages update integrity verification, installer launching, and file backups."""
+
+    @staticmethod
+    def install_payload(payload_path, install_dir, before_replace=None):
+        """Extract completely before swapping directories; restore on swap failure."""
+        install_dir = os.path.abspath(install_dir)
+        parent = os.path.dirname(install_dir)
+        os.makedirs(parent, exist_ok=True)
+        stage = tempfile.mkdtemp(prefix=".neuroget-stage-", dir=parent)
+        backup = install_dir + ".backup-" + uuid.uuid4().hex
+        try:
+            with zipfile.ZipFile(payload_path) as archive:
+                for member in archive.infolist():
+                    target = os.path.abspath(os.path.join(stage, member.filename.replace('\\', '/')))
+                    if os.path.commonpath([stage, target]) != stage:
+                        raise ValueError("Unsafe archive path")
+                archive.extractall(stage)
+            if not os.path.isfile(os.path.join(stage, "NeuroGet.exe")):
+                raise ValueError("Installer payload is missing NeuroGet.exe")
+            if before_replace:
+                before_replace()
+            if os.path.exists(install_dir):
+                os.replace(install_dir, backup)
+            try:
+                os.replace(stage, install_dir)
+            except Exception:
+                if os.path.exists(backup):
+                    os.replace(backup, install_dir)
+                raise
+            shutil.rmtree(backup, ignore_errors=True)
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
 
     @staticmethod
     def ensure_directories():
@@ -28,7 +63,7 @@ class UpdateInstaller:
     def verify_hash(cls, filepath: str, expected_hash: str) -> bool:
         """Verify that the file matches the expected SHA-256 hash (case-insensitive)."""
         if not expected_hash:
-            return True  # If no hash provided, consider valid
+            return False
         actual = cls.compute_sha256(filepath)
         return actual.lower() == expected_hash.strip().lower()
 

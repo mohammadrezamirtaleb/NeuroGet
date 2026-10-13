@@ -207,7 +207,8 @@ def test_incomplete_files_cleanup_on_cancel(tmp_path):
 
     assert not Path(worker.part_path).exists()
     assert not Path(worker._meta_path).exists()
-    assert not Path(worker.part_path + ".nglock").exists()
+    # Keep the lock inode stable so competing processes cannot lock different files.
+    assert Path(worker.part_path + ".nglock").exists()
 
 
 def test_ai_scanner_gguf_removesuffix():

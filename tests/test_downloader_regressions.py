@@ -66,7 +66,7 @@ def _worker(tmp_path, name="large.bin"):
     worker = DownloadWorker(1, f"https://example.test/{name}", str(tmp_path))
     if not hasattr(worker, "_test_events"):
         worker._test_events = []
-        for signal_name in ("finished", "error"):
+        for signal_name in ("download_finished", "error"):
             getattr(worker, signal_name).connect(
                 lambda *args, signal_name=signal_name: worker._test_events.append((signal_name, args))
             )
@@ -133,7 +133,7 @@ def test_finalize_does_not_report_success_when_rename_fails(tmp_path):
     assert Path(worker._meta_path).exists()
     assert not Path(worker.file_path).exists()
     if hasattr(worker, "_test_events"):
-        assert not any(name == "finished" for name, _ in worker._test_events)
+        assert not any(name == "download_finished" for name, _ in worker._test_events)
 
 
 def test_output_name_collision_is_preserved(tmp_path):
@@ -159,7 +159,7 @@ def test_segment_failure_emits_an_error(tmp_path):
 
     if hasattr(worker, "_test_events"):
         assert any(name == "error" for name, _ in worker._test_events)
-        assert not any(name == "finished" for name, _ in worker._test_events)
+        assert not any(name == "download_finished" for name, _ in worker._test_events)
     assert worker._failure == "Server returned HTTP 503"
 
 
@@ -186,7 +186,7 @@ def test_segmented_download_writes_every_byte(tmp_path):
     assert result[:1] == b"A"
     assert result[-1:] == b"B"
     if hasattr(worker, "_test_events"):
-        assert any(name == "finished" for name, _ in worker._test_events)
+        assert any(name == "download_finished" for name, _ in worker._test_events)
 
 
 def test_tls_error_is_not_retried_without_verification(tmp_path):

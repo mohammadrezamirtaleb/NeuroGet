@@ -2,17 +2,18 @@ import sys
 import os
 import zipfile
 import shutil
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QStandardPaths
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (SubtitleLabel, ProgressBar, PrimaryPushButton, 
                             BodyLabel, InfoBar, setTheme, Theme, ImageLabel, LineEdit)
 
 from app.common.version import __version__, APP_NAME
+from app.services.update_installer import UpdateInstaller
 
 class InstallWorker(QThread):
     progress = pyqtSignal(int, str)
-    finished = pyqtSignal(bool)
+    install_finished = pyqtSignal(bool)
     
     def run(self):
         try:
@@ -21,34 +22,26 @@ class InstallWorker(QThread):
             
             if not os.path.exists(payload_path):
                 self.progress.emit(0, "Payload not found! Run from compiled setup.")
-                self.finished.emit(False)
+                self.install_finished.emit(False)
                 return
 
             import subprocess
-            subprocess.run(['taskkill', '/F', '/IM', 'NeuroGet.exe'], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
             
             install_dir = os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet")
-            if os.path.exists(install_dir):
-                shutil.rmtree(install_dir, ignore_errors=True)
-            os.makedirs(install_dir, exist_ok=True)
             
             self.progress.emit(10, "Extracting files...")
             
-            with zipfile.ZipFile(payload_path, 'r') as zip_ref:
-                total_files = len(zip_ref.infolist())
-                for i, file_info in enumerate(zip_ref.infolist()):
-                    zip_ref.extract(file_info, install_dir)
-                    pct = int(10 + (i / total_files) * 80)
-                    if i % 10 == 0:  # Update text occasionally to prevent UI spam
-                        self.progress.emit(pct, f"Extracting {file_info.filename[:40]}...")
-                    else:
-                        self.progress.emit(pct, "") # Just update bar
+            UpdateInstaller.install_payload(
+                payload_path, install_dir,
+                before_replace=lambda: subprocess.run(
+                    ['taskkill', '/F', '/IM', 'NeuroGet.exe'], check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW))
                     
             self.progress.emit(90, "Creating shortcuts...")
             
             # Create Shortcut using VBScript
             target_path = os.path.join(install_dir, 'NeuroGet.exe')
-            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            desktop = QStandardPaths.writableLocation(QStandardPaths.DesktopLocation)
             shortcut_path = os.path.join(desktop, "NeuroGet.lnk")
             vbs_path = os.path.join(install_dir, "createshortcut.vbs")
             
@@ -65,7 +58,7 @@ oLink.Save
                 f.write(vbs_content)
                 
             import subprocess
-            subprocess.run(['cscript', '//Nologo', vbs_path], check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(['cscript', '//Nologo', vbs_path], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             if os.path.exists(vbs_path):
                 os.remove(vbs_path)
                 
@@ -90,10 +83,10 @@ oLink.Save
                 pass
             
             self.progress.emit(100, "Installation Complete!")
-            self.finished.emit(True)
+            self.install_finished.emit(True)
         except Exception as e:
             self.progress.emit(0, str(e))
-            self.finished.emit(False)
+            self.install_finished.emit(False)
 
 class SetupWizard(QWidget):
     def __init__(self):
@@ -171,7 +164,7 @@ class SetupWizard(QWidget):
             self.btn.setText("Installing...")
             self.worker = InstallWorker(parent=self)
             self.worker.progress.connect(self.update_progress)
-            self.worker.finished.connect(self.install_finished)
+            self.worker.install_finished.connect(self.install_finished)
             self.worker.start()
         elif self.btn.text() == "Launch NeuroGet":
             install_dir = os.path.expandvars(r"%LOCALAPPDATA%\Programs\NeuroGet")

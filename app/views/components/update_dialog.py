@@ -92,7 +92,7 @@ class UpdateDialog(QDialog):
 
         expected_hash = self.update_info.get("expected_hash", "")
         if expected_hash:
-            self.hash_badge = CaptionLabel("SHA-256 Verified Source", self)
+            self.hash_badge = CaptionLabel("SHA-256 checksum available", self)
             self.hash_badge.setStyleSheet("color: #107C41; font-weight: bold;")
             self.notes_header_layout.addWidget(self.hash_badge)
 
@@ -184,6 +184,8 @@ class UpdateDialog(QDialog):
         self.btn_later.clicked.connect(self.reject)
 
         self.btn_download = PrimaryPushButton("Download & Install Update", self, FIF.DOWNLOAD)
+        if not self.update_info.get("expected_hash", ""):
+            self.btn_download.setText("View Release on GitHub")
         self.btn_download.clicked.connect(self._start_download)
 
         self.btn_cancel_dl = PushButton("Cancel Download", self, FIF.CLOSE)
@@ -209,6 +211,9 @@ class UpdateDialog(QDialog):
             QDesktopServices.openUrl(QUrl(url))
 
     def _start_download(self):
+        if not self.update_info.get("expected_hash", ""):
+            self._open_github()
+            return
         download_url = self.update_info.get("download_url", "")
         if not download_url or not download_url.startswith("http"):
             # Fallback to web browser
@@ -298,7 +303,7 @@ class UpdateDialog(QDialog):
         success = UpdateInstaller.launch_installer(self.downloaded_installer_path)
         if success:
             self.accept()
-            QApplication.instance().quit()
+            QApplication.closeAllWindows()
         else:
             InfoBar.error("Launch Failed", "Could not start the installer executable.", parent=self)
 

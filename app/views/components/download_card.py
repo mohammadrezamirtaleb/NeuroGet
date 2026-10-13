@@ -743,6 +743,7 @@ class DownloadCard(CardWidget):
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="downloading")
 
     def cancel_download(self):
+        from app.common.workers import retire_worker
         self.db_timer.stop()
         self.retry_timer.stop()
         worker = None
@@ -756,11 +757,9 @@ class DownloadCard(CardWidget):
                     pass
             worker.cancel()
             try:
-                worker.setParent(None)
-                worker.finished.connect(worker.deleteLater)
+                retire_worker(worker)
             except (TypeError, RuntimeError):
                 pass
-            worker.wait(300)
 
         if hasattr(self, 'extract_worker') and self.extract_worker is not None:
             extract_worker = self.extract_worker
@@ -771,28 +770,17 @@ class DownloadCard(CardWidget):
                 pass
             extract_worker.cancel()
             try:
-                extract_worker.setParent(None)
-                extract_worker.finished.connect(extract_worker.deleteLater)
+                retire_worker(extract_worker)
             except (TypeError, RuntimeError):
                 pass
-            extract_worker.wait(200)
 
         if self.task_id:
             delete_task(self.task_id)
             self.task_id = None
 
         # Clean up partial, metadata, and lock files on disk
-        if worker is not None:
+        if worker is not None and not worker.isRunning():
             worker.cleanup_incomplete_files()
-        else:
-            part_path = os.path.join(self.save_dir, self.filename + ".part")
-            meta_path = os.path.join(self.save_dir, self.filename + ".ngmeta")
-            for p in (part_path, meta_path, meta_path + ".tmp", part_path + ".nglock"):
-                if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except Exception:
-                        pass
 
         self._emit_finished_once()
         self.deleteLater()

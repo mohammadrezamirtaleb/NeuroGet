@@ -47,6 +47,29 @@ def test_resume_all_starts_a_standalone_queued_task(page):
     assert card.worker.start.call_count == 1
 
 
+def test_resume_all_resumes_existing_standalone_worker(page):
+    card = page.create_download_card("https://vendor.test/file.bin", auto_start=True)
+    card.toggle_pause()
+    assert card.state == "paused"
+    page.resume_all_downloads()
+    assert card.state == "downloading"
+    assert not card.worker.is_paused
+    assert card.worker.start.call_count == 1
+
+
+def test_resume_all_resumes_active_batch_without_starting_next(page):
+    page.enqueue_urls(["https://vendor.test/a.bin", "https://vendor.test/b.bin"])
+    first = page.active_batch_card
+    second = page.batch_queue[0]
+    page.pause_all_downloads()
+    page.resume_all_downloads()
+    assert first.state == "downloading"
+    assert not first.worker.is_paused
+    assert page.active_batch_card is first
+    assert second.state == "queued"
+    assert page.batch_queue == [second]
+
+
 def test_resume_all_preserves_sequential_batch_order(page):
     page.enqueue_urls(["https://vendor.test/first.bin", "https://vendor.test/second.bin"])
     first = page.active_batch_card

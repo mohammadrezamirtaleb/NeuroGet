@@ -275,8 +275,13 @@ class UpdateDownloadWorker(QThread):
             self.download_failed.emit("Invalid update download URL.")
             return
 
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", self.expected_hash.strip()):
+            self.download_failed.emit("A valid SHA-256 checksum is required. Download this release from GitHub instead.")
+            return
+
         target_path = UpdateInstaller.get_target_installer_path(self.version_str, self.asset_name)
         temp_path = target_path + ".download"
+        response = None
 
         try:
             UpdateInstaller.cleanup_old_updates(keep_latest_file=target_path)
@@ -333,18 +338,13 @@ class UpdateDownloadWorker(QThread):
                             last_emit_time = now
                             bytes_since_last = 0
 
-            # Atomic rename from .download to final .exe (atomic on Windows/POSIX)
+            if self._is_cancelled:
+                raise RuntimeError("Update download cancelled.")
+            if total_size and downloaded != total_size:
+                raise RuntimeError("Incomplete update download.")
+            if not UpdateInstaller.verify_hash(temp_path, self.expected_hash):
+                raise RuntimeError("SHA-256 integrity verification failed. File may be corrupted.")
             os.replace(temp_path, target_path)
-
-            # Check integrity if expected hash is present
-            if self.expected_hash:
-                if not UpdateInstaller.verify_hash(target_path, self.expected_hash):
-                    try:
-                        os.remove(target_path)
-                    except Exception:
-                        pass
-                    self.download_failed.emit("SHA-256 integrity verification failed. File may be corrupted.")
-                    return
 
             self.download_finished.emit(target_path)
 
@@ -355,6 +355,8 @@ class UpdateDownloadWorker(QThread):
         except Exception as e:
             self.download_failed.emit(f"Download failed: {str(e)}")
         finally:
+            if response is not None:
+                response.close()
             if os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)

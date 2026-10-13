@@ -436,6 +436,9 @@ class DownloadsPage(QWidget):
         for i in range(self.scroll_layout.count()):
             w = self.scroll_layout.itemAt(i).widget()
             if isinstance(w, DownloadCard) and getattr(w, 'state', '') in ("paused", "error", "queued"):
+                if w.state == "paused" and w._started:
+                    w.toggle_pause()
+                    continue
                 if w not in self.batch_queue:
                     w.batch_queued = True
                     self.batch_queue.append(w)
@@ -676,8 +679,13 @@ class DownloadsPage(QWidget):
 
         while self.batch_queue:
             card = self.batch_queue.pop(0)
+            if card.state == "completed":
+                continue
             self.active_batch_card = card
-            card.start_download()
+            if card.state == "paused" and card._started:
+                card.toggle_pause()
+            else:
+                card.start_download()
             return
 
         self.active_batch_card = None

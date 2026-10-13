@@ -5,6 +5,7 @@ import tarfile
 import shutil
 import subprocess
 import requests
+import zlib
 from urllib.parse import urlparse
 
 class PasswordFinder:
@@ -182,7 +183,7 @@ class PasswordFinder:
                     had_bad_zip = True
                     last_err = bzf
                     continue
-                except (RuntimeError, zipfile.error) as err:
+                except (RuntimeError, zipfile.error, zlib.error) as err:
                     # Incorrect password or encryption mismatch, try next password
                     last_err = err
                     continue

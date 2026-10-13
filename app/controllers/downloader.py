@@ -106,20 +106,24 @@ class DownloadWorker(QThread):
             self._session = None
 
     def cleanup_incomplete_files(self):
-        """Remove partial download, metadata, and lock files on cancellation."""
-        for path in (self.part_path, self._meta_path, (self._meta_path + ".tmp") if self._meta_path else ""):
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-        if self.part_path:
-            lock_path = self.part_path + ".nglock"
-            if os.path.exists(lock_path):
-                try:
-                    os.remove(lock_path)
-                except Exception:
-                    pass
+        """Remove partial data; retain the lock inode for interprocess exclusion."""
+        if not self.part_path:
+            return
+        temporary_lock = None
+        if self._path_lock is None:
+            temporary_lock = self._try_lock_path(self.part_path)
+            if temporary_lock is None:
+                return
+        try:
+            for path in (self.part_path, self._meta_path, (self._meta_path + ".tmp") if self._meta_path else ""):
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception:
+                        pass
+        finally:
+            if temporary_lock is not None:
+                temporary_lock.close()
 
     def _wait_active(self):
         while not self._cancel_event.is_set():
@@ -413,10 +417,6 @@ class DownloadWorker(QThread):
                 pass
 
         self.download_finished.emit(self.file_path)
-        try:
-            self.finished.emit()
-        except (TypeError, RuntimeError):
-            pass
 
     def run(self):
         probe = None
@@ -515,7 +515,6 @@ class DownloadWorker(QThread):
                     probe.close()
                 except Exception:
                     pass
-            self._release_path_lock()
             if self._session is not None:
                 try:
                     self._session.close()
@@ -525,13 +524,7 @@ class DownloadWorker(QThread):
 
             if self.is_cancelled:
                 self.cleanup_incomplete_files()
-            elif self.file_path and os.path.exists(self.file_path) and self.part_path:
-                lock_path = self.part_path + ".nglock"
-                if os.path.exists(lock_path):
-                    try:
-                        os.remove(lock_path)
-                    except Exception:
-                        pass
+            self._release_path_lock()
 
     def _download_single(self, session, response, range_supported=False):
         try:
@@ -725,6 +718,10 @@ class DownloadWorker(QThread):
                             response = None
                             raise Exception(f"Server returned HTTP {status} on reconnect")
                     except Exception as conn_err:
+                        # A rejected response must never reach the streaming loop.
+                        if response is not None:
+                            response.close()
+                            response = None
                         if self.is_cancelled:
                             break
                         if retries >= max_retries:
