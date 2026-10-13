@@ -5,6 +5,7 @@ import json
 import requests
 import urllib3
 import urllib.parse
+import shutil
 
 from threading import Event, Lock
 from concurrent.futures import ThreadPoolExecutor
@@ -58,6 +59,8 @@ class DownloadWorker(QThread):
         self._file = None
         self._failure = None
         self._session = None
+        self._etag = ""
+        self._last_modified = ""
 
     def pause(self):
         self.is_paused = True
@@ -99,7 +102,8 @@ class DownloadWorker(QThread):
 
         # Use a standard browser User-Agent to avoid HTTP 403 blocks
         session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept-Encoding": "identity"
         })
 
         return session
@@ -107,21 +111,12 @@ class DownloadWorker(QThread):
     def _open_stream(self, session, headers=None):
         headers = headers or {}
 
-        try:
-            return session.get(
-                self.url,
-                headers=headers,
-                stream=True,
-                timeout=(10, 30)  # (connect_timeout, read_timeout)
-            )
-        except requests.exceptions.SSLError:
-            return session.get(
-                self.url,
-                headers=headers,
-                stream=True,
-                timeout=(10, 30),
-                verify=False
-            )
+        return session.get(
+            self.url,
+            headers=headers,
+            stream=True,
+            timeout=(10, 30)  # (connect_timeout, read_timeout)
+        )
 
     def _extract_filename(self, response):
         if self.filename:
@@ -147,6 +142,18 @@ class DownloadWorker(QThread):
 
         name = os.path.basename(name.replace("\\", "/")).strip()
         return self._sanitize_filename(name) or "downloaded_file"
+
+    def _clean_filename_if_enabled(self, filename):
+        enabled = get_setting("enable_ai_clean_renaming", "true").lower() in (
+            "true", "1", "yes"
+        )
+        if not enabled:
+            return filename
+        try:
+            from app.services.ai_client import AIClient
+            return self._sanitize_filename(AIClient._heuristic_clean_name(filename))
+        except Exception:
+            return filename
 
     @staticmethod
     def _sanitize_filename(name):
@@ -182,7 +189,7 @@ class DownloadWorker(QThread):
         try:
             raw = get_setting("max_threads", str(DEFAULT_MAX_SEGMENTS))
             val = int(raw) if raw is not None else DEFAULT_MAX_SEGMENTS
-            return max(1, val)
+            return min(32, max(1, val))
         except (ValueError, TypeError):
             return DEFAULT_MAX_SEGMENTS
 
@@ -207,25 +214,103 @@ class DownloadWorker(QThread):
             eta
         )
 
+    def _select_output_paths(self):
+        """Choose a collision-free target while preserving this URL's partial file."""
+        stem, ext = os.path.splitext(self.filename)
+        index = 0
+        while True:
+            suffix = "" if index == 0 else f" ({index})"
+            candidate = os.path.join(self.save_dir, f"{stem}{suffix}{ext}")
+            part_path = candidate + ".part"
+            meta_path = part_path + ".ngmeta"
+
+            if (os.path.exists(meta_path) and os.path.exists(part_path)
+                    and not os.path.exists(candidate)):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        if json.load(f).get("url") == self.url:
+                            self.filename = os.path.basename(candidate)
+                            return candidate, part_path, meta_path
+                except Exception:
+                    pass
+
+            if not os.path.exists(candidate) and not os.path.exists(part_path):
+                try:
+                    # Reserve the partial path atomically so simultaneous downloads
+                    # cannot select the same destination.
+                    with open(part_path, "xb"):
+                        pass
+                    self.filename = os.path.basename(candidate)
+                    return candidate, part_path, meta_path
+                except FileExistsError:
+                    pass
+            index += 1
+
+    def _capture_validators(self, response):
+        self._etag = response.headers.get("ETag", "") or ""
+        self._last_modified = response.headers.get("Last-Modified", "") or ""
+
+    def _meta_matches(self, meta):
+        if meta.get("url") != self.url:
+            return False
+        if int(meta.get("total_size", 0)) != self.total_size:
+            return False
+        old_etag = meta.get("etag", "")
+        old_modified = meta.get("last_modified", "")
+        if old_etag and self._etag and old_etag != self._etag:
+            return False
+        if old_modified and self._last_modified and old_modified != self._last_modified:
+            return False
+        return True
+
+    def _validate_content_range(self, response, expected_start, expected_end=None):
+        value = response.headers.get("Content-Range", "")
+        match = re.match(r"bytes\s+(\d+)-(\d+)/(\d+|\*)$", value, re.IGNORECASE)
+        if not match:
+            raise Exception("Server returned an invalid Content-Range header")
+        actual_start, actual_end = int(match.group(1)), int(match.group(2))
+        advertised_total = match.group(3)
+        if actual_start != expected_start:
+            raise Exception("Server resumed from an unexpected byte offset")
+        if expected_end is not None and actual_end > expected_end:
+            raise Exception("Server returned bytes outside the requested range")
+        if advertised_total.isdigit() and self.total_size > 0:
+            if int(advertised_total) != self.total_size:
+                raise Exception("Remote file changed size while downloading")
+        return actual_start, actual_end
+
+    def _ensure_disk_space(self, remaining):
+        if remaining <= 0:
+            return
+        free = shutil.disk_usage(self.save_dir).free
+        if free < remaining:
+            raise OSError(
+                f"Not enough disk space: {remaining} bytes required, {free} bytes available"
+            )
+
     def _finalize(self):
-        # Use os.replace (atomic, overwrites existing) with retry for Windows file locks
+        # Rename atomically without overwriting a file created after path selection.
+        finalized = False
+        last_error = None
         for attempt in range(5):
             try:
-                os.replace(self.part_path, self.file_path)
+                if os.path.exists(self.file_path):
+                    raise FileExistsError(
+                        f"A file already exists at the destination: {self.file_path}"
+                    )
+                os.rename(self.part_path, self.file_path)
+                finalized = True
                 break
-            except PermissionError:
+            except PermissionError as exc:
+                last_error = exc
                 # Windows Defender or Explorer may briefly lock the file
                 time.sleep(0.5 * (2 ** attempt))
-            except Exception:
-                # Fallback: try removing target first then rename
-                try:
-                    if os.path.exists(self.file_path):
-                        os.remove(self.file_path)
-                    os.rename(self.part_path, self.file_path)
-                    break
-                except Exception:
-                    if attempt == 4:
-                        raise
+            except Exception as exc:
+                last_error = exc
+                break
+
+        if not finalized:
+            raise last_error or OSError("Could not move completed download into place")
 
         if os.path.exists(self._meta_path):
             try:
@@ -255,18 +340,24 @@ class DownloadWorker(QThread):
                 probe.close()
                 raise Exception(f"Server returned HTTP {status}")
 
-            self.filename = self._extract_filename(probe)
-            self.file_path = os.path.join(self.save_dir, self.filename)
-            self.part_path = self.file_path + ".part"
-            self._meta_path = self.part_path + ".ngmeta"
+            self.filename = self._clean_filename_if_enabled(
+                self._extract_filename(probe)
+            )
+            self._capture_validators(probe)
 
             if probe.status_code == 206:
+                self._validate_content_range(probe, 0, 0)
                 self.total_size = self._parse_total_size(probe.headers, 0)
                 range_supported = True
                 probe.close()
             else:
                 self.total_size = self._parse_total_size(probe.headers, 0)
                 normal_response = probe
+
+            self.file_path, self.part_path, self._meta_path = self._select_output_paths()
+            if self.total_size > 0:
+                existing = os.path.getsize(self.part_path) if os.path.exists(self.part_path) else 0
+                self._ensure_disk_space(max(0, self.total_size - existing))
 
             self.metadata_ready.emit(self.filename, self.total_size)
 
@@ -327,8 +418,23 @@ class DownloadWorker(QThread):
                 else 0
             )
 
-            if range_supported and existing > 0 and not os.path.exists(self._meta_path):
+            resume_meta = None
+            if os.path.exists(self._meta_path):
+                try:
+                    with open(self._meta_path, "r", encoding="utf-8") as f:
+                        candidate_meta = json.load(f)
+                    if candidate_meta.get("mode") == "single" and self._meta_matches(candidate_meta):
+                        resume_meta = candidate_meta
+                except Exception:
+                    pass
+
+            if range_supported and existing > 0 and resume_meta is not None:
                 response.close()
+
+                if self.total_size > 0 and existing == self.total_size:
+                    self.downloaded_size = existing
+                    self._finalize()
+                    return
 
                 response = self._open_stream(
                     session,
@@ -336,6 +442,7 @@ class DownloadWorker(QThread):
                 )
 
                 if response.status_code == 206:
+                    self._validate_content_range(response, existing)
                     downloaded = existing
                     mode = "ab"
 
@@ -360,12 +467,16 @@ class DownloadWorker(QThread):
                     response.close()
                     raise Exception(f"Server returned HTTP {status}")
             else:
+                if existing > 0:
+                    mode = "wb"
+                    existing = 0
                 self.total_size = self._parse_total_size(
                     response.headers,
                     self.total_size
                 )
 
             self.downloaded_size = downloaded
+            self._save_meta(None, mode="single")
 
             start_time = time.time()
             bytes_since_start = 0
@@ -443,6 +554,7 @@ class DownloadWorker(QThread):
                     try:
                         response = self._open_stream(session, headers)
                         if response.status_code == 206:
+                            self._validate_content_range(response, self.downloaded_size)
                             range_supported = True
                             mode = "ab"
                             continue
@@ -487,83 +599,76 @@ class DownloadWorker(QThread):
                 with open(self._meta_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
 
-                if (
-                    meta.get("url") == self.url and
-                    int(meta.get("total_size", 0)) == self.total_size
-                ):
+                if meta.get("mode") == "segmented" and self._meta_matches(meta):
                     segments = meta.get("segments", [])
             except Exception:
                 segments = []
 
         if not segments:
-            if os.path.exists(self.part_path):
-                try:
-                    os.remove(self.part_path)
-                except Exception:
-                    pass
-
             if os.path.exists(self._meta_path):
                 try:
                     os.remove(self._meta_path)
                 except Exception:
                     pass
 
-            max_threads = self._get_max_threads()
-            segment_count = min(
-                max_threads,
-                max(1, int(self.total_size // MIN_SEGMENT_SIZE))
-            )
-
-            if self.total_size <= 0:
-                segment_count = 1
-
-            size = (
-                self.total_size // segment_count
-                if segment_count else 0
-            )
-
-            start = 0
-            segments = []
-
-            for i in range(segment_count):
-                if i == segment_count - 1:
-                    end = self.total_size - 1
-                else:
-                    end = start + size - 1
-
-                if end < start:
-                    end = start
-
-                segments.append([start, end, 0])
-                start = end + 1
+            segments = self._create_segments()
 
         if not os.path.exists(self.part_path):
             with open(self.part_path, "wb") as f:
                 if self.total_size > 0:
                     try:
                         f.truncate(self.total_size)
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        raise OSError(
+                            f"Cannot prepare a {self.total_size}-byte download on the destination drive"
+                        ) from exc
         elif self.total_size > 0:
             try:
-                if os.path.getsize(self.part_path) < self.total_size:
-                    with open(self.part_path, "r+b") as f:
-                        f.truncate(self.total_size)
-            except OSError:
-                pass
+                with open(self.part_path, "r+b") as f:
+                    f.truncate(self.total_size)
+            except OSError as exc:
+                raise OSError(
+                    f"Cannot prepare a {self.total_size}-byte download on the destination drive"
+                ) from exc
 
         self.downloaded_size = sum(int(s[2]) for s in segments)
         return segments
 
-    def _save_meta(self, segments):
+    def _create_segments(self):
+        """Build segment boundaries using unbounded Python integer offsets."""
+        max_threads = self._get_max_threads()
+        segment_count = min(
+            max_threads,
+            max(1, int(self.total_size // MIN_SEGMENT_SIZE))
+        )
+        if self.total_size <= 0:
+            segment_count = 1
+
+        size = self.total_size // segment_count if segment_count else 0
+        start = 0
+        segments = []
+        for index in range(segment_count):
+            end = self.total_size - 1 if index == segment_count - 1 else start + size - 1
+            if end < start:
+                end = start
+            segments.append([start, end, 0])
+            start = end + 1
+        return segments
+
+    def _save_meta(self, segments, mode="segmented"):
         try:
             # Deep-copy segments under lock to avoid data races
-            with self._state_lock:
-                safe_segments = [[s[0], s[1], s[2]] for s in segments]
+            safe_segments = None
+            if segments is not None:
+                with self._state_lock:
+                    safe_segments = [[s[0], s[1], s[2]] for s in segments]
 
             meta = {
                 "url": self.url,
                 "total_size": self.total_size,
+                "mode": mode,
+                "etag": self._etag,
+                "last_modified": self._last_modified,
                 "segments": safe_segments
             }
 
@@ -585,11 +690,6 @@ class DownloadWorker(QThread):
 
         try:
             self._file = open(self.part_path, "r+b")
-            if self.total_size > 0:
-                try:
-                    self._file.truncate(self.total_size)
-                except OSError:
-                    pass
 
             max_threads = self._get_max_threads()
             workers = min(max_threads, max(1, len(segments)))
@@ -656,7 +756,7 @@ class DownloadWorker(QThread):
                     pass
                 self._file = None
 
-        if self._failure and not self.is_cancelled:
+        if self._failure:
             self.error.emit(self._failure)
         elif self.is_cancelled:
             pass
@@ -688,10 +788,14 @@ class DownloadWorker(QThread):
 
             pos = start + downloaded
             response = None
+            segment_session = None
 
             try:
                 headers = {"Range": f"bytes={pos}-{end}"}
-                response = self._open_stream(session, headers)
+                # requests.Session is not guaranteed to be thread-safe. Give each
+                # segment an independent connection pool, especially for long transfers.
+                segment_session = self._make_session()
+                response = self._open_stream(segment_session, headers)
 
                 if response.status_code == 200:
                     raise Exception("Server ignored range request")
@@ -700,6 +804,8 @@ class DownloadWorker(QThread):
                     raise Exception(
                         f"Server returned HTTP {response.status_code}"
                     )
+
+                self._validate_content_range(response, pos, end)
 
                 for chunk in response.iter_content(CHUNK_SIZE):
                     if not self._wait_active():
@@ -725,13 +831,16 @@ class DownloadWorker(QThread):
                             seg[2] = int(seg[2]) + n
                             self.downloaded_size += n
 
+                if pos <= end:
+                    raise Exception("Connection closed before the segment completed")
                 return True
 
             except Exception as e:
                 if attempt == retries - 1 or self.is_cancelled:
                     if not self.is_cancelled:
                         self._failure = str(e)
-                    self.cancel()
+                    self._cancel_event.set()
+                    self._pause_event.set()
                     return False
 
                 time.sleep(1 + attempt)
@@ -741,6 +850,11 @@ class DownloadWorker(QThread):
                 if response is not None:
                     try:
                         response.close()
+                    except Exception:
+                        pass
+                if segment_session is not None:
+                    try:
+                        segment_session.close()
                     except Exception:
                         pass
 

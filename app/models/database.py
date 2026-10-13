@@ -187,6 +187,20 @@ def get_task_by_id(task_id):
         return session.query(DownloadTask).filter(DownloadTask.id == task_id).first()
 
 
+def delete_task(task_id):
+    if not task_id:
+        return
+    from .schemas import DownloadTask
+    with _db_lock:
+        with SessionLocal() as session:
+            try:
+                session.query(DownloadTask).filter(DownloadTask.id == task_id).delete()
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+
 def create_task(url, filename, save_path, category="General", threat_level="safe"):
     from .schemas import DownloadTask
     with _db_lock:

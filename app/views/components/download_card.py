@@ -34,7 +34,7 @@ from app.services.password_finder import PasswordFinder
 from app.services.ai_client import AIClient
 from app.services.threat_detector import ThreatDetector
 from app.controllers.downloader import DownloadWorker
-from app.models.database import update_task_progress, update_task_metadata, get_setting
+from app.models.database import update_task_progress, update_task_metadata, get_setting, delete_task
 from app.views.components.ai_summary_dialog import AISummaryDialog
 
 
@@ -421,11 +421,8 @@ class DownloadCard(CardWidget):
     def on_metadata_ready(self, real_filename, total_size):
         self.total_size = total_size
         
-        enable_renaming = get_setting("enable_ai_clean_renaming", "true").lower() in ("true", "1", "yes")
-        if enable_renaming:
-            self.filename = AIClient._heuristic_clean_name(real_filename)
-        else:
-            self.filename = real_filename
+        # The worker emits the exact collision-safe name used on disk.
+        self.filename = real_filename
 
         self.nameLabel.setText(self.filename)
         self._update_icon()
@@ -734,7 +731,8 @@ class DownloadCard(CardWidget):
             extract_worker.wait(100)
 
         if self.task_id:
-            update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="error")
+            delete_task(self.task_id)
+            self.task_id = None
 
         self._emit_finished_once()
         self.deleteLater()

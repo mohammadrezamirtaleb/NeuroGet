@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 )
 
 from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
+from PyQt5.QtGui import QDesktopServices
 
 from qfluentwidgets import (
     LineEdit,
@@ -43,7 +44,7 @@ from app.views.components.download_card import DownloadCard
 from app.services.router import SmartRouter
 from app.services.ai_client import AIClient
 from app.common.version import __version__, APP_NAME
-from app.models.database import create_task, get_all_tasks, get_setting
+from app.models.database import create_task, get_all_tasks, get_setting, clear_download_history
 
 
 class NLPromptWorker(QThread):
@@ -438,6 +439,9 @@ class DownloadsPage(QWidget):
             self.scroll_layout.removeWidget(card)
             card.deleteLater()
 
+        if to_remove:
+            clear_download_history()
+
         self._update_ui_counters()
         if to_remove:
             InfoBar.success("Cleaned", f"Cleared {len(to_remove)} completed download tasks.", parent=self.window())
@@ -499,7 +503,8 @@ class DownloadsPage(QWidget):
 
     def _on_nl_resolved(self, result, original_prompt):
         software_name = result.get("software_name", original_prompt)
-        url = result.get("official_url") or result.get("direct_link_hint")
+        url = result.get("direct_link_hint")
+        official_url = result.get("official_url")
 
         if url and url.startswith("http"):
             w = MessageBox(
@@ -513,6 +518,16 @@ class DownloadsPage(QWidget):
             if w.exec():
                 self.url_input.setText(url)
                 self.add_download()
+        elif official_url and official_url.startswith("http"):
+            w = MessageBox(
+                'AI Download Assistant',
+                f'No direct file was found for "{software_name}".\n\nOpen the official download page instead?\n\n{official_url}',
+                self.window()
+            )
+            w.yesButton.setText('Open Official Page')
+            w.cancelButton.setText('Cancel')
+            if w.exec():
+                QDesktopServices.openUrl(QUrl(official_url))
         else:
             InfoBar.warning(
                 "AI Assistant",
