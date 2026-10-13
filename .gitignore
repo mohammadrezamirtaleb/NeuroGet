@@ -11,3 +11,5 @@ payload.zip
 .vscode/
 .agents/
 pylint_errors.txt
+LocalLow/
+

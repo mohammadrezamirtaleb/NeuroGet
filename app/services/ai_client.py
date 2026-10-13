@@ -118,11 +118,15 @@ class AIClient:
                 "stream": False,
                 "options": {"temperature": 0.3, "num_predict": max_tokens}
             }
+            local_timeout = (1.5, max(timeout, 15) if isinstance(timeout, (int, float)) else timeout)
             try:
-                res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=fast_timeout)
+                res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=local_timeout)
                 if res.status_code == 200:
                     cls._offline_providers.pop(provider_key, None)
                     return res.json().get("response", "").strip()
+            except requests.exceptions.ReadTimeout:
+                # Cold model loading / slow generation; server is alive so do not blacklist
+                return None
             except Exception:
                 pass
 
@@ -139,10 +143,12 @@ class AIClient:
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
                         )
                         time.sleep(1.0)
-                        res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=fast_timeout)
+                        res = requests.post(f"{DEFAULT_OLLAMA_HOST}/api/generate", json=payload, timeout=local_timeout)
                         if res.status_code == 200:
                             cls._offline_providers.pop(provider_key, None)
                             return res.json().get("response", "").strip()
+                except requests.exceptions.ReadTimeout:
+                    return None
                 except Exception:
                     pass
 
@@ -289,6 +295,18 @@ class AIClient:
         choices = response.json().get("choices", [])
         return choices[0].get("message", {}).get("content", "").strip() if choices else None
 
+    @staticmethod
+    def _sanitize_url_for_ai(url):
+        """Strips query parameters, authentication, and fragments before sending URL to AI models."""
+        if not url:
+            return ""
+        try:
+            p = urllib.parse.urlparse(url)
+            netloc = p.netloc.split('@')[-1] if '@' in p.netloc else p.netloc
+            return urllib.parse.urlunparse((p.scheme, netloc, p.path, "", "", ""))
+        except Exception:
+            return url.split("?")[0]
+
     # --- Feature 1: AI Clean Renaming ---
     @classmethod
     def clean_filename(cls, raw_name, url=""):
@@ -306,10 +324,11 @@ class AIClient:
 
         # Separate base and extension
         _, ext = os.path.splitext(raw_name)
+        safe_url = cls._sanitize_url_for_ai(url)
 
         # 1. Try AI first if enabled
         prompt = (
-            f"Given the messy downloaded filename '{raw_name}' from URL '{url}', "
+            f"Given the messy downloaded filename '{raw_name}' from URL '{safe_url}', "
             f"return ONLY the clean, properly capitalized, human-readable filename preserving the extension '{ext}'. "
             f"Remove website prefixes, brackets, ad words, and hash strings. Example: '[Soft98.ir]_python-3.12.0-amd64.exe' -> 'Python 3.12.0 (x64).exe'. "
             f"Output strictly the cleaned filename without any quotation marks or extra explanation."
@@ -334,19 +353,35 @@ class AIClient:
         if "?" in name:
             name = name.split("?")[0]
 
-        # Remove common site prefixes like [Soft98.ir] or www.site.com_
+        # Remove bracketed/parenthesized site prefixes like [Soft98.ir] or (Soft98.ir)
         name = re.sub(r'^\[[a-zA-Z0-9._-]+\][\s_-]*', '', name)
         name = re.sub(r'^\([a-zA-Z0-9._-]+\)[\s_-]*', '', name)
-        name = re.sub(r'^(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,4}[_.\s-]+', '', name, flags=re.IGNORECASE)
+        
+        # Remove common site prefixes like www.site.com_ or site.com_
+        # Requires explicit domain indicators (www. or recognized TLD) followed by [_\s-]+ (never dot)
+        tlds = r'(?:com|net|org|ir|io|co|me|info|biz|ru|de|uk|cn|xyz|cc|tv)'
+        name = re.sub(
+            r'^(?:www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,6}|[a-zA-Z0-9-]+\.' + tlds + r')[_\s-]+',
+            '',
+            name,
+            flags=re.IGNORECASE
+        )
 
-        # Replace repeated underscores/dots with single space (except the extension)
+        # Separate base and extension, handling compound extensions
         parts = os.path.splitext(name)
         base = parts[0]
         ext = parts[1]
 
-        base = re.sub(r'[._]+', ' ', base).strip()
-        # Clean multiple spaces
-        base = re.sub(r'\s+', ' ', base)
+        compound_exts = ('.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst', '.user.js')
+        for ce in compound_exts:
+            if name.lower().endswith(ce):
+                base = name[:-len(ce)]
+                ext = name[-len(ce):]
+                break
+
+        # Collapse redundant underscores and whitespace; preserve version dots and internal periods
+        base = re.sub(r'_{2,}', '_', base)
+        base = re.sub(r'\s+', ' ', base).strip()
 
         if not base:
             base = "downloaded_file"
@@ -362,10 +397,11 @@ class AIClient:
         else:
             ext = ext.lower()
 
+        safe_url = cls._sanitize_url_for_ai(url)
         prompt = (
             f"Classify this file into ONE of the following categories: "
             f"[Documents, Software, Media, Audio, Archives, Education / Course, Games, Images, General].\n"
-            f"Filename: {filename}\nURL: {url}\nExtension: {ext}\n"
+            f"Filename: {filename}\nURL: {safe_url}\nExtension: {ext}\n"
             f"Respond with ONLY the exact category name."
         )
         ai_category = cls.call_llm(prompt, system_prompt="You are a file classifier. Output ONLY the category name.", max_tokens=20, timeout=3)

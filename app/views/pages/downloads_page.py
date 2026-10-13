@@ -352,14 +352,16 @@ class DownloadsPage(QWidget):
             self.empty_card.hide()
 
     def load_history(self):
+        auto_resume = get_setting("enable_auto_resume", "true").lower() in ("true", "1", "yes")
         try:
             tasks = get_all_tasks()
 
             for task in tasks:
-                status = getattr(task, "status", "pending") or "pending"
+                orig_status = getattr(task, "status", "pending") or "pending"
                 category = getattr(task, "category", "General") or "General"
                 threat = getattr(task, "threat_level", "safe") or "safe"
 
+                status = orig_status
                 if status in ("pending", "downloading"):
                     status = "paused"
 
@@ -377,6 +379,13 @@ class DownloadsPage(QWidget):
 
                 card.taskFinished.connect(self.on_card_finished)
                 self.scroll_layout.addWidget(card)
+
+                if auto_resume and orig_status in ("pending", "downloading"):
+                    card.batch_queued = True
+                    self.batch_queue.append(card)
+
+            if auto_resume and self.batch_queue:
+                self.start_next_batch()
 
         except Exception:
             pass
@@ -427,9 +436,9 @@ class DownloadsPage(QWidget):
         for i in range(self.scroll_layout.count()):
             w = self.scroll_layout.itemAt(i).widget()
             if isinstance(w, DownloadCard) and getattr(w, 'state', '') in ("paused", "error", "queued"):
-                if w in self.batch_queue:
-                    continue
-                w.toggle_pause()
+                if w not in self.batch_queue:
+                    w.batch_queued = True
+                    self.batch_queue.append(w)
         self.start_next_batch()
         self._update_ui_counters()
 
@@ -462,7 +471,19 @@ class DownloadsPage(QWidget):
                     return
 
                 self.last_clipboard_text = text
-                self.url_input.setText(text)
+
+                # Do not prompt if URL is already present in downloads
+                existing_urls = set()
+                for i in range(self.scroll_layout.count()):
+                    w = self.scroll_layout.itemAt(i).widget()
+                    if isinstance(w, DownloadCard) and hasattr(w, 'url'):
+                        existing_urls.add(w.url)
+                if text in existing_urls:
+                    return
+
+                # Only prefill url_input if empty to avoid overwriting typed user input
+                if not self.url_input.text().strip():
+                    self.url_input.setText(text)
 
                 if not is_startup:
                     self.prompt_download_confirmation(text)
@@ -478,6 +499,7 @@ class DownloadsPage(QWidget):
         w.cancelButton.setText('Cancel')
 
         if w.exec():
+            self.url_input.setText(url)
             QTimer.singleShot(250, self.add_download)
 
     def add_download(self):
@@ -486,8 +508,17 @@ class DownloadsPage(QWidget):
         if not text:
             return
 
+        if text.startswith("ftp://"):
+            InfoBar.error(
+                "Unsupported Protocol",
+                "FTP downloads are not supported. Please use an HTTP or HTTPS link.",
+                parent=self.window(),
+                duration=4000
+            )
+            return
+
         # Check if input is a natural language prompt instead of direct URL
-        if not text.startswith(("http://", "https://", "ftp://")):
+        if not text.startswith(("http://", "https://")):
             self.handle_natural_language_prompt(text)
             return
 

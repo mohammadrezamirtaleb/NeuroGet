@@ -21,14 +21,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 DEFAULT_MAX_SEGMENTS = 16
 MIN_SEGMENT_SIZE = 2 * 1024 * 1024
 MIN_MULTITHREAD_SIZE = 8 * 1024 * 1024
-CHUNK_SIZE = 1024 * 1024
+CHUNK_SIZE = 64 * 1024
+
+_RUNNING_WORKERS = set()
 
 
 class DownloadWorker(QThread):
     metadata_ready = pyqtSignal(str, object)        # object allows >2GB int values
     destination_ready = pyqtSignal(str, str)
     progress_update = pyqtSignal(object, float, str) # object avoids int32 overflow
-    finished = pyqtSignal(str)
+    download_finished = pyqtSignal(str)              # avoids shadowing QThread.finished
     error = pyqtSignal(str)
 
     def __init__(self, task_id, url, save_dir, parent=None):
@@ -39,6 +41,7 @@ class DownloadWorker(QThread):
         self.save_dir = save_dir
 
         self.filename = ""
+        self.raw_filename = ""
         self.total_size = 0
         self.downloaded_size = 0
 
@@ -65,6 +68,16 @@ class DownloadWorker(QThread):
         self._path_lock = None
         self.route_files = False
 
+        self._active_sessions = set()
+        self._active_sessions_lock = Lock()
+
+        # Prevent premature Python GC destruction while native thread runs
+        self.finished.connect(lambda: _RUNNING_WORKERS.discard(self))
+
+    def start(self, priority=QThread.InheritPriority):
+        _RUNNING_WORKERS.add(self)
+        super().start(priority)
+
     def pause(self):
         self.is_paused = True
         self._pause_event.clear()
@@ -78,17 +91,41 @@ class DownloadWorker(QThread):
         self.is_paused = False
         self._cancel_event.set()
         self._pause_event.set()
+        with self._active_sessions_lock:
+            for s in list(self._active_sessions):
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            self._active_sessions.clear()
         if self._session is not None:
             try:
                 self._session.close()
             except Exception:
                 pass
+            self._session = None
+
+    def cleanup_incomplete_files(self):
+        """Remove partial download, metadata, and lock files on cancellation."""
+        for path in (self.part_path, self._meta_path, (self._meta_path + ".tmp") if self._meta_path else ""):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        if self.part_path:
+            lock_path = self.part_path + ".nglock"
+            if os.path.exists(lock_path):
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
 
     def _wait_active(self):
         while not self._cancel_event.is_set():
             if self._pause_event.is_set():
                 return True
-            time.sleep(0.1)
+            time.sleep(0.05)
         return False
 
     def _make_session(self):
@@ -109,6 +146,9 @@ class DownloadWorker(QThread):
             "Accept-Encoding": "identity"
         })
 
+        with self._active_sessions_lock:
+            self._active_sessions.add(session)
+
         return session
 
     def _open_stream(self, session, headers=None):
@@ -118,11 +158,16 @@ class DownloadWorker(QThread):
             if validator:
                 headers["If-Range"] = validator
 
+        try:
+            read_timeout = int(get_setting("socket_timeout", "30"))
+        except (ValueError, TypeError):
+            read_timeout = 30
+
         return session.get(
             self.url,
             headers=headers,
             stream=True,
-            timeout=(10, 30)  # (connect_timeout, read_timeout)
+            timeout=(10, read_timeout)
         )
 
     def _extract_filename(self, response):
@@ -367,11 +412,21 @@ class DownloadWorker(QThread):
             except Exception:
                 pass
 
-        self.finished.emit(self.file_path)
+        self.download_finished.emit(self.file_path)
+        try:
+            self.finished.emit()
+        except (TypeError, RuntimeError):
+            pass
 
     def run(self):
         probe = None
         try:
+            parsed_url = urllib.parse.urlparse(self.url)
+            if parsed_url.scheme.lower() not in ("http", "https"):
+                raise Exception(
+                    f"Unsupported protocol '{parsed_url.scheme}'. Only HTTP and HTTPS downloads are supported."
+                )
+
             os.makedirs(self.save_dir, exist_ok=True)
             self._session = self._make_session()
             session = self._session
@@ -382,7 +437,16 @@ class DownloadWorker(QThread):
 
             try:
                 probe = self._open_stream(session, {"Range": "bytes=0-0"})
+                # If server rejects range probe (e.g. 416 or 400), fall back to standard GET
+                if probe.status_code not in (200, 206):
+                    probe.close()
+                    probe = self._open_stream(session)
             except requests.exceptions.RequestException:
+                if probe is not None:
+                    try:
+                        probe.close()
+                    except Exception:
+                        pass
                 probe = self._open_stream(session)
 
             if probe.status_code not in (200, 206):
@@ -390,9 +454,9 @@ class DownloadWorker(QThread):
                 probe.close()
                 raise Exception(f"Server returned HTTP {status}")
 
-            self.filename = self._clean_filename_if_enabled(
-                self._extract_filename(probe)
-            )
+            raw_name = self._extract_filename(probe)
+            self.raw_filename = raw_name
+            self.filename = self._clean_filename_if_enabled(raw_name)
             self._capture_validators(probe)
 
             if probe.status_code == 206:
@@ -447,7 +511,10 @@ class DownloadWorker(QThread):
                 self.error.emit(str(e))
         finally:
             if probe is not None:
-                probe.close()
+                try:
+                    probe.close()
+                except Exception:
+                    pass
             self._release_path_lock()
             if self._session is not None:
                 try:
@@ -455,6 +522,16 @@ class DownloadWorker(QThread):
                 except Exception:
                     pass
                 self._session = None
+
+            if self.is_cancelled:
+                self.cleanup_incomplete_files()
+            elif self.file_path and os.path.exists(self.file_path) and self.part_path:
+                lock_path = self.part_path + ".nglock"
+                if os.path.exists(lock_path):
+                    try:
+                        os.remove(lock_path)
+                    except Exception:
+                        pass
 
     def _download_single(self, session, response, range_supported=False):
         try:
@@ -537,6 +614,8 @@ class DownloadWorker(QThread):
                 )
 
             self.downloaded_size = downloaded
+            if self.downloaded_size > 0:
+                mode = "ab"
             self._save_meta(None, mode="single")
 
             start_time = time.time()
@@ -555,38 +634,47 @@ class DownloadWorker(QThread):
                     break
 
                 stream_error = None
-                try:
-                    with open(self.part_path, mode) as f:
-                        for chunk in response.iter_content(CHUNK_SIZE):
-                            if not self._wait_active():
-                                break
+                stream_finished_cleanly = False
 
-                            if chunk:
-                                f.write(chunk)
-                                n = len(chunk)
+                if response is not None:
+                    if self.downloaded_size > 0:
+                        mode = "ab"
+                    try:
+                        with open(self.part_path, mode) as f:
+                            for chunk in response.iter_content(CHUNK_SIZE):
+                                if not self._wait_active():
+                                    break
 
-                                self.downloaded_size += n
-                                bytes_since_start += n
+                                if chunk:
+                                    f.write(chunk)
+                                    n = len(chunk)
 
-                                elapsed = time.time() - start_time
+                                    self.downloaded_size += n
+                                    bytes_since_start += n
+                                    mode = "ab"
 
-                                if elapsed >= 0.5:
-                                    speed = bytes_since_start / elapsed if elapsed > 0 else 0.0
-                                    self._emit_progress(speed)
+                                    elapsed = time.time() - start_time
 
-                                    start_time = time.time()
-                                    bytes_since_start = 0
+                                    if elapsed >= 0.5:
+                                        speed = bytes_since_start / elapsed if elapsed > 0 else 0.0
+                                        self._emit_progress(speed)
 
-                                retries = 0
-                except Exception as err:
-                    stream_error = err
-                finally:
-                    if response is not None:
-                        try:
-                            response.close()
-                        except Exception:
-                            pass
-                        response = None
+                                        start_time = time.time()
+                                        bytes_since_start = 0
+
+                                    retries = 0
+
+                        if not self.is_cancelled and not self.is_paused:
+                            stream_finished_cleanly = True
+                    except Exception as err:
+                        stream_error = err
+                    finally:
+                        if response is not None:
+                            try:
+                                response.close()
+                            except Exception:
+                                pass
+                            response = None
 
                 if self.is_cancelled:
                     break
@@ -594,13 +682,13 @@ class DownloadWorker(QThread):
                 if self.total_size > 0 and self.downloaded_size >= self.total_size:
                     break
 
-                if stream_error is None and not self.is_paused and self.total_size <= 0:
+                if stream_finished_cleanly and self.total_size <= 0:
                     break
 
                 if not self._wait_active():
                     break
 
-                if stream_error is not None or (self.total_size > 0 and self.downloaded_size < self.total_size):
+                if stream_error is not None or (self.total_size > 0 and self.downloaded_size < self.total_size) or not stream_finished_cleanly:
                     if self.downloaded_size > 0 and not self._resume_validator():
                         raise Exception(
                             "Connection interrupted. Server supplies no file validator; retry to restart safely."

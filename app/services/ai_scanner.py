@@ -111,7 +111,14 @@ class LocalAIDetector:
     def _scan_ollama_disk_manifests():
         models = []
         custom_path = os.environ.get('OLLAMA_MODELS')
-        base_dirs = [custom_path] if custom_path else []
+        base_dirs = []
+        if custom_path:
+            norm_custom = custom_path.rstrip('/\\')
+            if os.path.basename(norm_custom).lower() == 'manifests':
+                base_dirs.append(custom_path)
+            else:
+                base_dirs.append(os.path.join(custom_path, 'manifests'))
+
         base_dirs.extend([
             os.path.expanduser('~/.ollama/models/manifests'),
             os.path.expandvars(r'%USERPROFILE%\.ollama\models\manifests')
@@ -166,7 +173,9 @@ class LocalAIDetector:
                     for f in files:
                         if f.endswith('.gguf'):
                             rel = os.path.relpath(os.path.join(root, f), base)
-                            model_id = rel.replace('\\', '/').rstrip('.gguf')
+                            model_id = rel.replace('\\', '/')
+                            if model_id.endswith('.gguf'):
+                                model_id = model_id[:-5]
                             if model_id not in models:
                                 models.append(model_id)
         return models

@@ -58,7 +58,7 @@ def test_real_segmented_http_transfer_preserves_session_and_bytes(monkeypatch, t
     worker = DownloadWorker(1, url, str(tmp_path))
     failures, completed = [], []
     worker.error.connect(failures.append)
-    worker.finished.connect(completed.append)
+    worker.download_finished.connect(completed.append)
     worker.run()
     assert failures == []
     assert completed == [str(tmp_path / "large.bin")]

@@ -157,13 +157,13 @@ class MainWindow(FluentWindow):
                         widget.worker.metadata_ready.disconnect()
                         widget.worker.destination_ready.disconnect()
                         widget.worker.progress_update.disconnect()
-                        widget.worker.finished.disconnect()
+                        widget.worker.download_finished.disconnect()
                         widget.worker.error.disconnect()
                     except Exception:
                         pass
                     try:
                         widget.worker.cancel()
-                        widget.worker.wait(50)
+                        widget.worker.wait(300)
                     except Exception:
                         pass
                 if widget and hasattr(widget, 'extract_worker') and widget.extract_worker is not None:
@@ -173,7 +173,7 @@ class MainWindow(FluentWindow):
                         pass
                     try:
                         widget.extract_worker.cancel()
-                        widget.extract_worker.wait(50)
+                        widget.extract_worker.wait(200)
                     except Exception:
                         pass
 

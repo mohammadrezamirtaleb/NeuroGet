@@ -367,7 +367,13 @@ class DownloadCard(CardWidget):
         if not enable_threat:
             return
 
-        threat = ThreatDetector.analyze_download(filename, self.url, total_size)
+        # Always check raw filename first to prevent clean-renaming from evading detection
+        threat = ThreatDetector.analyze_download(self.raw_filename or filename, self.url, total_size)
+        if threat["is_safe"] and filename and filename != self.raw_filename:
+            cleaned_threat = ThreatDetector.analyze_download(filename, self.url, total_size)
+            if not cleaned_threat["is_safe"]:
+                threat = cleaned_threat
+
         if not threat["is_safe"]:
             self.threat_level = threat["level"]
             self.threatBadge.setText("Suspicious" if threat["level"] == "warning" else "High Risk")
@@ -387,7 +393,7 @@ class DownloadCard(CardWidget):
         self.worker.route_files = self._route_download
         self.worker.destination_ready.connect(self.on_destination_ready)
         self.worker.progress_update.connect(self.on_progress)
-        self.worker.finished.connect(self.on_finished)
+        self.worker.download_finished.connect(self.on_finished)
         self.worker.error.connect(self.on_error)
 
     def start_download(self):
@@ -449,6 +455,8 @@ class DownloadCard(CardWidget):
         
         # The worker emits the exact collision-safe name used on disk.
         self.filename = real_filename
+        if self.worker and hasattr(self.worker, 'raw_filename') and self.worker.raw_filename:
+            self.raw_filename = self.worker.raw_filename
 
         self.nameLabel.setText(self.filename)
         self._update_icon()
@@ -488,17 +496,26 @@ class DownloadCard(CardWidget):
         self.progressBar.setValue(100)
         self.db_timer.stop()
 
+        final_size = self.total_size if self.total_size > 0 else (
+            os.path.getsize(filepath) if (filepath and os.path.exists(filepath)) else self.downloaded_size
+        )
         if self.task_id:
             update_task_progress(
                 self.task_id,
-                self.total_size,
-                self.total_size,
+                final_size,
+                final_size,
                 status="completed"
             )
 
-        if self.total_size > 0:
-            size_str = format_size(self.total_size)
-            self.sizeLabel.setText(f"{size_str} / {size_str} (100%)")
+        size_str = format_size(final_size)
+        self.sizeLabel.setText(f"{size_str} / {size_str} (100%)")
+
+        if get_setting("enable_completion_sound", "true").lower() in ("true", "1", "yes"):
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_OK)
+            except Exception:
+                pass
 
         self.btnPause.hide()
         self.btnCancel.hide()
@@ -644,6 +661,9 @@ class DownloadCard(CardWidget):
 
     def copy_url(self):
         if self.url:
+            win = self.window()
+            if hasattr(win, 'downloads_page') and hasattr(win.downloads_page, 'last_clipboard_text'):
+                win.downloads_page.last_clipboard_text = self.url
             QApplication.clipboard().setText(self.url)
             InfoBar.success('Copied', 'Download link copied to clipboard.', parent=self.window(), duration=2500)
 
@@ -725,10 +745,11 @@ class DownloadCard(CardWidget):
     def cancel_download(self):
         self.db_timer.stop()
         self.retry_timer.stop()
+        worker = None
         if self.worker is not None:
             worker = self.worker
             self.worker = None
-            for sig in (worker.metadata_ready, worker.destination_ready, worker.progress_update, worker.finished, worker.error):
+            for sig in (worker.metadata_ready, worker.destination_ready, worker.progress_update, worker.download_finished, worker.error):
                 try:
                     sig.disconnect()
                 except (TypeError, RuntimeError):
@@ -739,7 +760,7 @@ class DownloadCard(CardWidget):
                 worker.finished.connect(worker.deleteLater)
             except (TypeError, RuntimeError):
                 pass
-            worker.wait(150)
+            worker.wait(300)
 
         if hasattr(self, 'extract_worker') and self.extract_worker is not None:
             extract_worker = self.extract_worker
@@ -754,11 +775,24 @@ class DownloadCard(CardWidget):
                 extract_worker.finished.connect(extract_worker.deleteLater)
             except (TypeError, RuntimeError):
                 pass
-            extract_worker.wait(100)
+            extract_worker.wait(200)
 
         if self.task_id:
             delete_task(self.task_id)
             self.task_id = None
+
+        # Clean up partial, metadata, and lock files on disk
+        if worker is not None:
+            worker.cleanup_incomplete_files()
+        else:
+            part_path = os.path.join(self.save_dir, self.filename + ".part")
+            meta_path = os.path.join(self.save_dir, self.filename + ".ngmeta")
+            for p in (part_path, meta_path, meta_path + ".tmp", part_path + ".nglock"):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
 
         self._emit_finished_once()
         self.deleteLater()

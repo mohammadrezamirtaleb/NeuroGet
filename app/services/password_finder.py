@@ -73,10 +73,8 @@ class PasswordFinder:
                 if stripped not in passwords:
                     passwords.append(stripped)
 
-        # 3. Deep Web Page Scraping (if referrer is given or webpage URL)
-        url_path = (parsed.path or "").lower()
-        is_archive_url = bool(re.search(r'\.(?:zip|rar|7z|tar|gz|bz2|xz|tgz|7z\.\d+|part\d+\.rar)$', url_path, re.I))
-        page_to_scrape = referrer_url or (None if is_archive_url else url)
+        # 3. Deep Web Page Scraping (only when explicit referrer page is given, never direct download URL)
+        page_to_scrape = referrer_url
         if page_to_scrape:
             page_pwds = cls.scrape_password_from_webpage(page_to_scrape)
             passwords.extend(page_pwds)
@@ -147,6 +145,11 @@ class PasswordFinder:
 
         # 1. ZIP Archives
         if ext == '.zip':
+            if not zipfile.is_zipfile(archive_path):
+                return {"success": False, "message": "Corrupted archive or invalid ZIP format."}
+
+            last_err = None
+            had_bad_zip = False
             for pwd in passwords_to_try:
                 if is_cancelled and is_cancelled():
                     return {"success": False, "message": "Extraction cancelled."}
@@ -172,13 +175,23 @@ class PasswordFinder:
                         "output_dir": real_out,
                         "message": f"Successfully extracted to {real_out}"
                     }
-                except zipfile.BadZipFile:
-                    return {"success": False, "message": "Corrupted archive or invalid ZIP format."}
-                except (RuntimeError, zipfile.error):
+                except zipfile.BadZipFile as bzf:
+                    # When testing an encrypted ZIP with ZipCrypto, a wrong password can match the
+                    # 1-byte header check (1/256 chance) and then fail inflate/CRC as BadZipFile.
+                    # Do not abort the entire password candidate list; continue testing remaining passwords.
+                    had_bad_zip = True
+                    last_err = bzf
+                    continue
+                except (RuntimeError, zipfile.error) as err:
                     # Incorrect password or encryption mismatch, try next password
+                    last_err = err
                     continue
                 except Exception as e:
                     return {"success": False, "message": str(e)}
+
+            if had_bad_zip and not (candidate_passwords or []):
+                return {"success": False, "message": "Corrupted archive or invalid ZIP format."}
+            return {"success": False, "message": f"Extraction failed: incorrect password or corrupted archive ({last_err or 'invalid password'})."}
 
         # 2. TAR / GZ Archives
         elif ext in ('.tar', '.gz', '.tgz', '.bz2', '.xz'):
