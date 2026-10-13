@@ -26,6 +26,7 @@ CHUNK_SIZE = 1024 * 1024
 
 class DownloadWorker(QThread):
     metadata_ready = pyqtSignal(str, object)        # object allows >2GB int values
+    destination_ready = pyqtSignal(str, str)
     progress_update = pyqtSignal(object, float, str) # object avoids int32 overflow
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
@@ -61,6 +62,8 @@ class DownloadWorker(QThread):
         self._session = None
         self._etag = ""
         self._last_modified = ""
+        self._path_lock = None
+        self.route_files = False
 
     def pause(self):
         self.is_paused = True
@@ -109,7 +112,11 @@ class DownloadWorker(QThread):
         return session
 
     def _open_stream(self, session, headers=None):
-        headers = headers or {}
+        headers = dict(headers or {})
+        if "Range" in headers:
+            validator = self._resume_validator()
+            if validator:
+                headers["If-Range"] = validator
 
         return session.get(
             self.url,
@@ -224,12 +231,18 @@ class DownloadWorker(QThread):
             part_path = candidate + ".part"
             meta_path = part_path + ".ngmeta"
 
+            path_lock = self._try_lock_path(part_path)
+            if path_lock is None:
+                index += 1
+                continue
+
             if (os.path.exists(meta_path) and os.path.exists(part_path)
                     and not os.path.exists(candidate)):
                 try:
                     with open(meta_path, "r", encoding="utf-8") as f:
                         if json.load(f).get("url") == self.url:
                             self.filename = os.path.basename(candidate)
+                            self._path_lock = path_lock
                             return candidate, part_path, meta_path
                 except Exception:
                     pass
@@ -241,10 +254,46 @@ class DownloadWorker(QThread):
                     with open(part_path, "xb"):
                         pass
                     self.filename = os.path.basename(candidate)
+                    self._path_lock = path_lock
                     return candidate, part_path, meta_path
                 except FileExistsError:
                     pass
+                except Exception:
+                    path_lock.close()
+                    raise
+            path_lock.close()
             index += 1
+
+    @staticmethod
+    def _try_lock_path(part_path):
+        """OS locks exclude other workers/processes and expire on process exit."""
+        handle = open(part_path + ".nglock", "a+b")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0, os.SEEK_END)
+                if handle.tell() == 0:
+                    handle.write(b"\0")
+                    handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except OSError:
+            handle.close()
+            return None
+
+    def _release_path_lock(self):
+        if self._path_lock is not None:
+            self._path_lock.close()
+            self._path_lock = None
+
+    def _resume_validator(self):
+        if self._etag and not self._etag.startswith("W/"):
+            return self._etag
+        return self._last_modified
 
     def _capture_validators(self, response):
         self._etag = response.headers.get("ETag", "") or ""
@@ -257,11 +306,11 @@ class DownloadWorker(QThread):
             return False
         old_etag = meta.get("etag", "")
         old_modified = meta.get("last_modified", "")
-        if old_etag and self._etag and old_etag != self._etag:
-            return False
-        if old_modified and self._last_modified and old_modified != self._last_modified:
-            return False
-        return True
+        if old_etag and not old_etag.startswith("W/"):
+            return old_etag == self._etag
+        # URL and size alone cannot establish file identity. Restart safely when
+        # neither a strong ETag nor a matching Last-Modified value is available.
+        return bool(old_modified and old_modified == self._last_modified)
 
     def _validate_content_range(self, response, expected_start, expected_end=None):
         value = response.headers.get("Content-Range", "")
@@ -321,6 +370,7 @@ class DownloadWorker(QThread):
         self.finished.emit(self.file_path)
 
     def run(self):
+        probe = None
         try:
             os.makedirs(self.save_dir, exist_ok=True)
             self._session = self._make_session()
@@ -353,6 +403,14 @@ class DownloadWorker(QThread):
             else:
                 self.total_size = self._parse_total_size(probe.headers, 0)
                 normal_response = probe
+
+            if self.route_files:
+                from app.services.router import SmartRouter
+                self.save_dir, category = SmartRouter.route_download(
+                    self.url, self.filename, default_dir=self.save_dir
+                )
+                os.makedirs(self.save_dir, exist_ok=True)
+                self.destination_ready.emit(self.save_dir, category)
 
             self.file_path, self.part_path, self._meta_path = self._select_output_paths()
             if self.total_size > 0:
@@ -388,6 +446,9 @@ class DownloadWorker(QThread):
             if not self.is_cancelled:
                 self.error.emit(str(e))
         finally:
+            if probe is not None:
+                probe.close()
+            self._release_path_lock()
             if self._session is not None:
                 try:
                     self._session.close()
@@ -540,6 +601,10 @@ class DownloadWorker(QThread):
                     break
 
                 if stream_error is not None or (self.total_size > 0 and self.downloaded_size < self.total_size):
+                    if self.downloaded_size > 0 and not self._resume_validator():
+                        raise Exception(
+                            "Connection interrupted. Server supplies no file validator; retry to restart safely."
+                        )
                     retries += 1
                     if retries > max_retries:
                         if stream_error and not self.is_cancelled:
@@ -836,7 +901,8 @@ class DownloadWorker(QThread):
                 return True
 
             except Exception as e:
-                if attempt == retries - 1 or self.is_cancelled:
+                unsafe_resume = int(seg[2]) > 0 and not self._resume_validator()
+                if attempt == retries - 1 or self.is_cancelled or unsafe_resume:
                     if not self.is_cancelled:
                         self._failure = str(e)
                     self._cancel_event.set()

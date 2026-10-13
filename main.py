@@ -155,6 +155,7 @@ class MainWindow(FluentWindow):
                 if widget and hasattr(widget, 'worker') and widget.worker is not None:
                     try:
                         widget.worker.metadata_ready.disconnect()
+                        widget.worker.destination_ready.disconnect()
                         widget.worker.progress_update.disconnect()
                         widget.worker.finished.disconnect()
                         widget.worker.error.disconnect()

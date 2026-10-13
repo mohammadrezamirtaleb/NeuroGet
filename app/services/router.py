@@ -16,6 +16,7 @@ class SmartRouter:
 
         ext = os.path.splitext(filename)[1].lower() if "." in filename else ""
         fn_lower = filename.lower()
+        ai_cat = None
 
         # 1. Evaluate User-Defined Active Rules in Database
         try:
@@ -44,17 +45,18 @@ class SmartRouter:
                         os.makedirs(dest, exist_ok=True)
                         return dest, getattr(rule, 'name', 'Custom Rule')
 
-                # Condition: AI Semantic Category (use heuristic only to avoid UI freeze)
+                # Called by background workers; classify once per routing operation.
                 elif cond_type == "ai_category":
-                    ai_cat = AIClient._heuristic_category(filename, ext)
+                    if ai_cat is None:
+                        ai_cat = AIClient.classify_category(filename, url, ext)
                     if cond_val.lower() in ai_cat.lower() or ai_cat.lower() in cond_val.lower():
                         os.makedirs(dest, exist_ok=True)
                         return dest, ai_cat
         except Exception:
             pass
 
-        # 2. Default Automatic Semantic Categorization (heuristic-only to avoid UI freeze)
-        cat = AIClient._heuristic_category(filename, ext)
+        # 2. Selected provider with AIClient's heuristic fallback on failure.
+        cat = ai_cat or AIClient.classify_category(filename, url, ext)
         cat_folder = os.path.join(default_dir, cat)
         try:
             os.makedirs(cat_folder, exist_ok=True)

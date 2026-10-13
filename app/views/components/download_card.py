@@ -118,7 +118,8 @@ class DownloadCard(CardWidget):
         category="General",
         threat_level="safe",
         auto_start=True,
-        parent=None
+        parent=None,
+        route_download=False
     ):
         super().__init__(parent)
 
@@ -128,6 +129,7 @@ class DownloadCard(CardWidget):
         self.save_dir = save_dir
         self.task_id = task_id
         self.category = category or "General"
+        self._route_download = route_download
         self.threat_level = threat_level
 
         self.state = status
@@ -379,6 +381,8 @@ class DownloadCard(CardWidget):
             parent=self
         )
         self.worker.metadata_ready.connect(self.on_metadata_ready)
+        self.worker.route_files = self._route_download
+        self.worker.destination_ready.connect(self.on_destination_ready)
         self.worker.progress_update.connect(self.on_progress)
         self.worker.finished.connect(self.on_finished)
         self.worker.error.connect(self.on_error)
@@ -417,6 +421,15 @@ class DownloadCard(CardWidget):
                 self.total_size,
                 status="downloading"
             )
+
+    def on_destination_ready(self, save_dir, category):
+        self.save_dir = save_dir
+        self.category = category
+        self._route_download = False
+        self.categoryBadge.setText(category)
+        self._style_category_badge()
+        if self.task_id:
+            update_task_metadata(self.task_id, save_path=save_dir, category=category)
 
     def on_metadata_ready(self, real_filename, total_size):
         self.total_size = total_size
@@ -702,7 +715,7 @@ class DownloadCard(CardWidget):
         if self.worker is not None:
             worker = self.worker
             self.worker = None
-            for sig in (worker.metadata_ready, worker.progress_update, worker.finished, worker.error):
+            for sig in (worker.metadata_ready, worker.destination_ready, worker.progress_update, worker.finished, worker.error):
                 try:
                     sig.disconnect()
                 except (TypeError, RuntimeError):

@@ -64,6 +64,12 @@ class _Session:
 
 def _worker(tmp_path, name="large.bin"):
     worker = DownloadWorker(1, f"https://example.test/{name}", str(tmp_path))
+    if not hasattr(worker, "_test_events"):
+        worker._test_events = []
+        for signal_name in ("finished", "error"):
+            getattr(worker, signal_name).connect(
+                lambda *args, signal_name=signal_name: worker._test_events.append((signal_name, args))
+            )
     worker.filename = name
     worker.file_path = str(tmp_path / name)
     worker.part_path = worker.file_path + ".part"
@@ -139,6 +145,7 @@ def test_output_name_collision_is_preserved(tmp_path):
     assert Path(target).name == "report (1).bin"
     assert Path(part).exists()
     assert (tmp_path / "report.bin").read_bytes() == b"original"
+    worker._release_path_lock()
 
 
 def test_segment_failure_emits_an_error(tmp_path):
@@ -202,3 +209,65 @@ def test_tls_error_is_not_retried_without_verification(tmp_path):
     else:
         raise AssertionError("TLS failure must be reported")
     assert session.calls == 1
+
+
+def test_duplicate_url_cannot_reuse_an_active_partial(tmp_path):
+    first = _worker(tmp_path, "duplicate.bin")
+    second = _worker(tmp_path, "duplicate.bin")
+    try:
+        first.file_path, first.part_path, first._meta_path = first._select_output_paths()
+        first._etag = '"v1"'
+        first._save_meta(None, mode="single")
+        second_path, _, _ = second._select_output_paths()
+        assert second_path != first.file_path
+    finally:
+        first._release_path_lock()
+        second._release_path_lock()
+
+
+def test_partial_can_be_resumed_after_owner_releases_it(tmp_path):
+    first = _worker(tmp_path, "resume-owner.bin")
+    second = _worker(tmp_path, "resume-owner.bin")
+    try:
+        first.file_path, first.part_path, first._meta_path = first._select_output_paths()
+        first._save_meta(None, mode="single")
+        first._release_path_lock()
+        second_path, _, _ = second._select_output_paths()
+        assert second_path == first.file_path
+    finally:
+        first._release_path_lock()
+        second._release_path_lock()
+
+
+def test_resume_requires_a_matching_file_validator(tmp_path):
+    worker = _worker(tmp_path)
+    worker.total_size = 100
+    meta = {"url": worker.url, "total_size": 100}
+    assert not worker._meta_matches(meta)
+    worker._etag = '"new"'
+    assert not worker._meta_matches({**meta, "etag": '"old"'})
+    assert worker._meta_matches({**meta, "etag": '"new"'})
+    worker._etag = 'W/"weak"'
+    assert not worker._meta_matches({**meta, "etag": worker._etag})
+    worker._last_modified = "Wed, 01 Jan 2025 00:00:00 GMT"
+    assert worker._meta_matches({**meta, "last_modified": worker._last_modified})
+
+
+def test_range_request_includes_if_range(tmp_path):
+    worker = _worker(tmp_path)
+    worker._etag = '"file-v1"'
+    session = types.SimpleNamespace(get=lambda *_a, **kw: kw)
+    options = worker._open_stream(session, {"Range": "bytes=10-20"})
+    assert options["headers"]["If-Range"] == '"file-v1"'
+
+
+def test_stale_segment_metadata_restarts_all_segments(tmp_path):
+    worker = _worker(tmp_path)
+    worker.total_size = 6
+    Path(worker.part_path).write_bytes(b"OLDold")
+    Path(worker._meta_path).write_text(json.dumps({
+        "mode": "segmented", "url": worker.url, "total_size": 6,
+        "segments": [[0, 5, 3]]
+    }), encoding="utf-8")
+    assert worker._load_or_create_segments() == [[0, 5, 0]]
+    assert worker.downloaded_size == 0

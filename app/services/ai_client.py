@@ -4,12 +4,14 @@ import json
 import time
 import requests
 import urllib.parse
+import logging
 from app.models.database import get_setting
 
 # Provider endpoints configuration
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 DEFAULT_LMSTUDIO_HOST = "http://localhost:1234/v1"
 DEFAULT_GPT4ALL_HOST = "http://localhost:4891/v1"
+logger = logging.getLogger(__name__)
 
 class AIClient:
     """Universal AI Client supporting Local (Ollama, LM Studio, GPT4All) and Cloud LLMs
@@ -26,11 +28,22 @@ class AIClient:
 
     @classmethod
     def get_api_key(cls):
-        return get_setting("ai_api_key", "")
+        provider = cls.get_configured_provider()
+        return get_setting(f"ai_api_key:{provider}", get_setting("ai_api_key", ""))
 
     @classmethod
     def get_model_name(cls):
-        return get_setting("ai_model", "")
+        provider = cls.get_configured_provider()
+        return get_setting(f"ai_model:{provider}", get_setting("ai_model", ""))
+
+    @staticmethod
+    def default_model(provider):
+        name = provider.lower()
+        if "anthropic" in name or "claude" in name:
+            return "claude-sonnet-4-6"
+        if "opencode" in name:
+            return "glm-5.1"
+        return ""
 
     @classmethod
     def call_llm(cls, prompt, system_prompt=None, max_tokens=500, timeout=6):
@@ -52,13 +65,39 @@ class AIClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
+        # Copilot subscriptions are not a generic API-key chat provider. Never
+        # send their tokens to OpenAI or another unrelated service.
+        if "copilot" in provider_key:
+            logger.warning("Copilot is unsupported as an API-key provider; choose a supported provider.")
+            return None
+
+        if "anthropic" in provider_key or "claude" in provider_key or "opencode" in provider_key:
+            if not api_key:
+                return None
+            try:
+                selected_model = model or cls.default_model(provider)
+                if "opencode" in provider_key:
+                    result = cls._call_opencode(
+                        prompt, system_prompt, selected_model, api_key, max_tokens, fast_timeout
+                    )
+                else:
+                    result = cls._call_messages(
+                        "https://api.anthropic.com/v1/messages", prompt, system_prompt,
+                        selected_model, {"x-api-key": api_key}, max_tokens, fast_timeout
+                    )
+                cls._offline_providers.pop(provider_key, None)
+                return result
+            except Exception:
+                cls._offline_providers[provider_key] = time.time() + 60.0
+                return None
+
         # 1. Local: Ollama
         if "ollama" in provider.lower():
             # Determine model
             ollama_model = model
             if not ollama_model or "local:" in ollama_model.lower():
-                if "-" in provider:
-                    ollama_model = provider.split("-")[-1].strip()
+                if " - " in provider:
+                    ollama_model = provider.split(" - ", 1)[1].strip()
                 else:
                     from app.services.ai_scanner import LocalAIDetector
                     disk_models = LocalAIDetector._scan_ollama_disk_manifests()
@@ -116,6 +155,9 @@ class AIClient:
                     "temperature": 0.3,
                     "max_tokens": max_tokens
                 }
+                local_model = model or (provider.split(" - ", 1)[1].strip() if " - " in provider else "")
+                if local_model:
+                    payload["model"] = local_model
                 res = requests.post(f"{host}/chat/completions", json=payload, timeout=fast_timeout)
                 if res.status_code == 200:
                     data = res.json()
@@ -126,8 +168,8 @@ class AIClient:
             except Exception:
                 cls._offline_providers[provider_key] = time.time() + 60.0
 
-        # 3. Cloud: OpenAI / OpenRouter / Groq / OpenCode Zen
-        if any(p in provider.lower() for p in ["openai", "openrouter", "groq", "opencode", "copilot"]):
+        # 3. Cloud: OpenAI / OpenRouter / Groq
+        if any(p in provider.lower() for p in ["openai", "openrouter", "groq"]):
             if not api_key:
                 return None
             try:
@@ -183,6 +225,66 @@ class AIClient:
                 cls._offline_providers[provider_key] = time.time() + 60.0
 
         return None
+
+    @staticmethod
+    def _call_messages(endpoint, prompt, system_prompt, model, auth, max_tokens, timeout):
+        payload = {
+            "model": model, "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        if system_prompt:
+            payload["system"] = system_prompt
+        response = requests.post(endpoint, json=payload, timeout=timeout, headers={
+            **auth, "anthropic-version": "2023-06-01", "Content-Type": "application/json"
+        })
+        response.raise_for_status()
+        return "\n".join(
+            part.get("text", "") for part in response.json().get("content", [])
+            if part.get("type") == "text"
+        ).strip() or None
+
+    @classmethod
+    def _call_opencode(cls, prompt, system_prompt, model, api_key, max_tokens, timeout):
+        # https://opencode.ai/v2/docs/console/api/inference
+        root = "https://opencode.ai/inference"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        lowered = model.lower()
+        if lowered.startswith(("claude", "qwen")) and lowered != "qwen3.8-max":
+            return cls._call_messages(
+                root + "/anthropic/v1/messages", prompt, system_prompt,
+                model, headers, max_tokens, timeout
+            )
+        if lowered.startswith("gemini"):
+            response = requests.post(
+                f"{root}/google/v1beta/models/{urllib.parse.quote(model, safe='')}:generateContent",
+                headers=headers, timeout=timeout,
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      **({"systemInstruction": {"parts": [{"text": system_prompt}]}} if system_prompt else {}),
+                      "generationConfig": {"maxOutputTokens": max_tokens}}
+            )
+            response.raise_for_status()
+            candidates = response.json().get("candidates", [])
+            return "\n".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip() if candidates else None
+        if lowered.startswith(("gpt", "grok", "muse")):
+            response = requests.post(
+                root + "/openai/v1/responses", headers=headers, timeout=timeout,
+                json={"model": model, "input": prompt, "max_output_tokens": max_tokens,
+                      **({"instructions": system_prompt} if system_prompt else {})}
+            )
+            response.raise_for_status()
+            return "\n".join(
+                part.get("text", "") for item in response.json().get("output", [])
+                for part in item.get("content", []) if part.get("type") == "output_text"
+            ).strip() or None
+        messages = ([{"role": "system", "content": system_prompt}] if system_prompt else [])
+        messages.append({"role": "user", "content": prompt})
+        response = requests.post(
+            root + "/openai/v1/chat/completions", headers=headers, timeout=timeout,
+            json={"model": model, "messages": messages, "max_tokens": max_tokens}
+        )
+        response.raise_for_status()
+        choices = response.json().get("choices", [])
+        return choices[0].get("message", {}).get("content", "").strip() if choices else None
 
     # --- Feature 1: AI Clean Renaming ---
     @classmethod
@@ -392,12 +494,42 @@ class AIClient:
                 if json_match:
                     parsed = json.loads(json_match.group(0))
                     if isinstance(parsed, dict) and ("official_url" in parsed or "direct_link_hint" in parsed):
-                        return parsed
+                        return cls._validate_download_result(parsed)
             except Exception:
                 pass
 
         # Offline heuristic fallback
-        return cls._heuristic_resolve_download(prompt_text)
+        return cls._validate_download_result(cls._heuristic_resolve_download(prompt_text))
+
+    @staticmethod
+    def _validate_download_result(result):
+        """Probe links in the NL worker so HTML/error pages never become installers."""
+        if not isinstance(result, dict):
+            return {}
+        result = dict(result)
+        for key in ("official_url", "direct_link_hint"):
+            value = result.get(key)
+            if not isinstance(value, str) or urllib.parse.urlparse(value).scheme not in ("http", "https"):
+                result[key] = ""
+        url = result.get("direct_link_hint")
+        if not url:
+            return result
+        try:
+            with requests.get(url, stream=True, timeout=(5, 10), headers={
+                "Range": "bytes=0-511", "Accept-Encoding": "identity"
+            }) as response:
+                response.raise_for_status()
+                mime = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                sample = next(response.iter_content(512), b"").lstrip().lower()
+                if (response.status_code not in (200, 206)
+                        or mime in ("text/html", "application/xhtml+xml", "application/json")
+                        or sample.startswith((b"<!doctype html", b"<html"))):
+                    result["direct_link_hint"] = ""
+                    if not result.get("official_url"):
+                        result["official_url"] = url
+        except requests.RequestException:
+            result["direct_link_hint"] = ""
+        return result
 
     @classmethod
     def _heuristic_resolve_download(cls, prompt_text):
@@ -446,7 +578,7 @@ class AIClient:
                 "Git",
                 f"Git-{version or '2.44.0'}-64-bit.exe",
                 "https://git-scm.com/downloads",
-                "https://github.com/git-for-windows/git/releases/latest"
+                ""
             ),
             (
                 r'\b(?:node|node\.?js)\b',
@@ -460,7 +592,7 @@ class AIClient:
                 "Blender",
                 f"blender-{version or '4.0.2'}-windows-x64.msi",
                 "https://www.blender.org/download/",
-                "https://www.blender.org/download/"
+                ""
             ),
             (
                 r'\b(?:7[\s-]?zip|7z)\b',
@@ -481,14 +613,14 @@ class AIClient:
                 "OBS Studio",
                 f"OBS-Studio-{version or '30.0.2'}-Full-Installer-x64.exe",
                 "https://obsproject.com/",
-                "https://obsproject.com/download"
+                ""
             ),
             (
-                r'\bnotepad\+\+\b',
+                r'\bnotepad\+\+(?!\w)',
                 "Notepad++",
                 "npp.Installer.x64.exe",
                 "https://notepad-plus-plus.org/",
-                "https://notepad-plus-plus.org/downloads/"
+                ""
             ),
             (
                 r'\btelegram\b',

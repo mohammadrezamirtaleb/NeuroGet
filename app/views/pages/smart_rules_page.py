@@ -174,7 +174,7 @@ class SmartRulesPage(QWidget):
         self.cloud_providers = [
             "OpenAI (GPT-4o-mini)",
             "Google (Gemini 1.5 Flash)",
-            "Anthropic (Claude 3.5 Sonnet)",
+            "Anthropic (Claude)",
             "OpenRouter (Universal)",
             "OpenCode Zen"
         ]
@@ -606,10 +606,16 @@ class SmartRulesPage(QWidget):
         api_input.setText(saved_key)
         api_input.setPlaceholderText("sk-...")
         w.textLayout.addWidget(api_input)
+        model_input = LineEdit(w.widget)
+        model_input.setText(get_setting(f"ai_model:{provider}", ""))
+        model_input.setPlaceholderText(AIClient.default_model(provider) or "Optional model ID")
+        w.textLayout.addWidget(model_input)
 
         if w.exec():
             api_key = api_input.text().strip()
             set_setting("ai_api_key", api_key)
+            set_setting(f"ai_api_key:{provider}", api_key)
+            set_setting(f"ai_model:{provider}", model_input.text().strip())
             set_setting("ai_provider", provider)
             InfoBar.success('Saved', f'API Key configured for {provider}', parent=self.window())
 

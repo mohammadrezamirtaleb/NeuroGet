@@ -41,7 +41,6 @@ from qfluentwidgets import (
 from qfluentwidgets import FluentIcon as FIF
 
 from app.views.components.download_card import DownloadCard
-from app.services.router import SmartRouter
 from app.services.ai_client import AIClient
 from app.common.version import __version__, APP_NAME
 from app.models.database import create_task, get_all_tasks, get_setting, clear_download_history
@@ -300,7 +299,7 @@ class DownloadsPage(QWidget):
 
     def _paste_from_clipboard(self):
         mime = self.clipboard.mimeData()
-        if mime.hasText():
+        if mime is not None and mime.hasText():
             text = mime.text().strip()
             if text:
                 self.url_input.setText(text)
@@ -449,7 +448,7 @@ class DownloadsPage(QWidget):
     def check_clipboard(self, is_startup=False):
         mime_data = self.clipboard.mimeData()
 
-        if mime_data.hasText():
+        if mime_data is not None and mime_data.hasText():
             text = mime_data.text().strip()
 
             if text.startswith("http://") or text.startswith("https://"):
@@ -541,10 +540,10 @@ class DownloadsPage(QWidget):
         if not raw_name or raw_name == url:
             raw_name = "download_file.bin"
 
-        # Apply Smart Routing & Category Discovery
+        # Prepare the task; the download worker performs AI routing.
         base_downloads = get_setting("default_download_dir", os.path.join(os.path.expanduser("~"), "Downloads"))
-        save_dir, category = SmartRouter.route_download(url, raw_name, default_dir=base_downloads)
-        os.makedirs(save_dir, exist_ok=True)
+        # Routing runs in DownloadWorker after server metadata is available.
+        save_dir, category = base_downloads, "General"
 
         task_id = create_task(url, raw_name, save_dir, category=category)
 
@@ -556,7 +555,8 @@ class DownloadsPage(QWidget):
             status=status,
             category=category,
             auto_start=auto_start,
-            parent=self
+            parent=self,
+            route_download=True
         )
 
         card.taskFinished.connect(self.on_card_finished)

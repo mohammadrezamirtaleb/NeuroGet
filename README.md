@@ -100,12 +100,14 @@ graph TD
 
 ### 🚀 High-Speed Multi-Threaded Engine
 * **Segmented Fetching:** Splits incoming files into dynamic byte-range chunks fetched simultaneously over concurrent HTTP connections (up to 32 threads).
-* **Safe Resumption:** Incomplete files are safely written as `.part` files with verified byte offsets to prevent corruption upon network drops.
+* **Safe Resumption:** Incomplete files use `.part` files with verified byte offsets and matching strong ETags or modification dates. Downloads restart safely when the server cannot establish file identity. OS file locks keep simultaneous downloads from sharing a partial file.
 * **Smart Clipboard Sniffer:** Automatically identifies download links copied to the clipboard and presents an unobtrusive prompt to start downloading.
 
 ### 🧠 Universal AI Client (Local & Cloud LLMs)
 * **Offline-First Local Discovery:** Automatically detects local models installed on disk (`~/.ollama/models/manifests`), supports LM Studio (`localhost:1234`), and GPT4All.
-* **Cloud LLM Support:** Connects directly to OpenAI (GPT-4o), Google Gemini 1.5 Flash, Anthropic Claude 3.5 Sonnet, and OpenRouter.
+* **Cloud LLM Support:** Connects to OpenAI, Google Gemini, Anthropic Claude, OpenRouter, and OpenCode. Configure a model ID in the API key dialog. Claude uses the Messages API; OpenCode selects the Messages, Responses, Gemini, or Chat Completions API for the configured model family. Copilot subscriptions are not supported as API-key providers; saved Copilot selections use heuristic fallbacks without forwarding tokens to other services.
+* **Background AI Routing:** Semantic rules and automatic categories consult the selected provider in the download worker, with heuristic fallbacks when unavailable. Explicit extension and filename rules retain priority according to their rule order.
+* **Verified AI Download Links:** Natural-language results are probed for HTML and error responses before offering a file download. Results that identify a webpage offer to open that page in the browser.
 * **100% Heuristic Fallbacks:** Zero dependency on internet connectivity or external APIs; all categorization and renaming tasks fall back smoothly to rule-based heuristics if no LLM is present.
 
 ### 📄 Content Analyzer & Document Mini-RAG
