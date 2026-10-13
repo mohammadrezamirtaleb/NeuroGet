@@ -2,7 +2,7 @@ import os
 import sqlite3
 import threading
 import logging
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -90,17 +90,27 @@ def _migrate_db():
 def init_db():
     from .schemas import DownloadTask, SmartRule, AppSetting
     with _db_lock:
+        existing_database = inspect(engine).has_table("smart_rules")
         Base.metadata.create_all(bind=engine, tables=[DownloadTask.__table__, SmartRule.__table__, AppSetting.__table__])
         _migrate_db()
-        _seed_default_rules_if_empty()
+        _seed_default_rules_if_empty(existing_database=existing_database)
 
 
-def _seed_default_rules_if_empty():
-    from .schemas import SmartRule
+def _seed_default_rules_if_empty(force=False, existing_database=False):
+    from .schemas import SmartRule, AppSetting
     with _db_lock:
         with SessionLocal() as session:
             try:
+                marker = session.get(AppSetting, "default_rules_initialized")
+                if marker is not None and not force:
+                    return
                 existing_names = {r[0] for r in session.query(SmartRule.name).all() if r[0]}
+                # An existing database belongs to the user. Mark it initialized
+                # without recreating presets they may already have deleted.
+                if (existing_database or existing_names) and not force:
+                    session.add(AppSetting(key="default_rules_initialized", value="true"))
+                    session.commit()
+                    return
                 downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
                 defaults = [
                     SmartRule(
@@ -142,7 +152,9 @@ def _seed_default_rules_if_empty():
                 rules_to_add = [r for r in defaults if r.name not in existing_names]
                 if rules_to_add:
                     session.add_all(rules_to_add)
-                    session.commit()
+                if marker is None:
+                    session.add(AppSetting(key="default_rules_initialized", value="true"))
+                session.commit()
             except Exception as e:
                 session.rollback()
                 logger.error(f"Failed to seed default rules: {e}")

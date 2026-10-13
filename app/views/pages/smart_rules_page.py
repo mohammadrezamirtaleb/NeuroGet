@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidgetItem,
-    QHeaderView, QFileDialog, QDialog, QSizePolicy
+    QHeaderView, QFileDialog, QDialog, QSizePolicy, QLineEdit
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from qfluentwidgets import (
@@ -532,7 +532,7 @@ class SmartRulesPage(QWidget):
         self.vbox.addWidget(self.test_card)
 
     def restore_default_rules(self):
-        _seed_default_rules_if_empty()
+        _seed_default_rules_if_empty(force=True)
         self.load_rules_table()
         InfoBar.success("Defaults Restored", "Standard category routing presets are active.", parent=self.window())
 
@@ -600,10 +600,11 @@ class SmartRulesPage(QWidget):
             InfoBar.info('Local Model', 'Local models running on your machine do not require an API key.', parent=self.window())
             return
 
-        saved_key = get_setting("ai_api_key", "")
+        saved_key = get_setting(f"ai_api_key:{provider}", "")
         w = MessageBox(f'Configure {provider}', 'Enter your API Key for this AI provider:', self.window())
         api_input = LineEdit(w.widget)
         api_input.setText(saved_key)
+        api_input.setEchoMode(QLineEdit.Password)
         api_input.setPlaceholderText("sk-...")
         w.textLayout.addWidget(api_input)
         model_input = LineEdit(w.widget)
@@ -613,10 +614,10 @@ class SmartRulesPage(QWidget):
 
         if w.exec():
             api_key = api_input.text().strip()
-            set_setting("ai_api_key", api_key)
             set_setting(f"ai_api_key:{provider}", api_key)
             set_setting(f"ai_model:{provider}", model_input.text().strip())
             set_setting("ai_provider", provider)
+            AIClient._offline_providers.pop(provider.lower().strip(), None)
             InfoBar.success('Saved', f'API Key configured for {provider}', parent=self.window())
 
     def start_scan(self, silent=False):

@@ -1,5 +1,6 @@
 import os
 import subprocess
+from html import escape
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget,
     QStackedWidget, QApplication, QFileDialog, QSizePolicy
@@ -16,6 +17,7 @@ from qfluentwidgets import (
 
 from app.services.content_analyzer import ContentAnalyzer
 from app.services.ai_client import AIClient
+from app.services.document_context import normalize_history
 
 
 class SummaryWorker(QThread):
@@ -26,20 +28,31 @@ class SummaryWorker(QThread):
         self.filepath = filepath
 
     def run(self):
-        result = ContentAnalyzer.analyze_file(self.filepath)
+        try:
+            result = ContentAnalyzer.analyze_file(self.filepath)
+        except Exception:
+            result = {"summary": "The file could not be analyzed. Check that it exists and is readable.",
+                      "metadata": {}, "raw_text": "", "is_ai": False}
         self.finished_analysis.emit(result)
 
 
 class ChatWorker(QThread):
     response_ready = pyqtSignal(str)
 
-    def __init__(self, document_text, query, parent=None):
+    def __init__(self, document_text, query, parent=None, history=None, filepath=None):
         super().__init__(parent)
         self.document_text = document_text
         self.query = query
+        self.history = normalize_history(history)
+        self.filepath = filepath
 
     def run(self):
-        reply = AIClient.chat_with_document(self.document_text, self.query)
+        try:
+            reply = AIClient.chat_with_document(
+                self.document_text, self.query, history=self.history, filepath=self.filepath
+            )
+        except Exception:
+            reply = "The document assistant could not complete this request. Please try again."
         self.response_ready.emit(reply)
 
 
@@ -57,6 +70,9 @@ class AISummaryDialog(QDialog):
         self.document_text = ""
         self.worker = None
         self.chat_worker = None
+        self.conversation_history = []
+        self._analysis_ready = False
+        self._pending_close_result = None
 
         self.setWindowTitle(f"NeuroGet AI - {self.filename}")
         self.resize(840, 620)
@@ -446,12 +462,17 @@ class AISummaryDialog(QDialog):
     def _start_analysis(self):
         self.worker = SummaryWorker(self.filepath, parent=self)
         self.worker.finished_analysis.connect(self._on_analysis_finished)
+        self.worker.finished.connect(self._finish_pending_close)
         self.worker.start()
 
     def _on_analysis_finished(self, data):
+        if self._pending_close_result is not None:
+            return
+        self._analysis_ready = True
         self.analysis_data = data
         self.document_text = data.get("raw_text", "")
-        self.status_label.setText("AI Analysis Ready • Offline Neural Engine")
+        is_ai = bool(data.get("is_ai"))
+        self.status_label.setText("AI Analysis Ready" if is_ai else "Document Analysis Ready • Local Summary")
 
         # Hide loading spinner and display summary text
         self.loading_container.hide()
@@ -462,7 +483,7 @@ class AISummaryDialog(QDialog):
         reading_time = data.get("reading_time_min", 1)
         self.badge_words_val.setText(f"{words:,} items/words")
         self.badge_time_val.setText(f"~{reading_time} min read")
-        self.badge_ai_val.setText("Neural Summary")
+        self.badge_ai_val.setText("AI Summary" if is_ai else "Local Summary")
 
         summary_content = data.get("summary", "No summary available.")
         self.summary_text.setMarkdown(summary_content)
@@ -496,6 +517,10 @@ class AISummaryDialog(QDialog):
         self._reset_chat_history()
 
     def _reset_chat_history(self):
+        self.conversation_history = []
+        self._render_chat_history()
+
+    def _render_chat_history(self, thinking=False):
         dark = isDarkTheme()
         tag_bg = "rgba(0, 153, 255, 0.15)"
         text_color = "#ffffff" if dark else "#1f1f1f"
@@ -505,11 +530,19 @@ class AISummaryDialog(QDialog):
         <div style='color: {text_color}; font-family: Segoe UI, sans-serif; font-size: 13px;'>
             <div style='background: {tag_bg}; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;'>
                 <b style='color: #0099ff;'>NeuroGet AI Assistant:</b><br/>
-                <span style='color: {desc_color};'>I have indexed the contents of <b>{self.filename}</b>. Feel free to ask questions, request bulleted summaries, or query specific details from the document.</span>
+                <span style='color: {desc_color};'>Ask questions about <b>{escape(self.filename)}</b>. I search the available document text for relevant passages.</span>
             </div>
         </div>
         """
-        self.chat_history.setHtml(welcome_html)
+        bubbles = []
+        for message in self.conversation_history:
+            role = "You" if message["role"] == "user" else "AI"
+            content = escape(message["content"]).replace("\n", "<br/>")
+            bubbles.append(f"<p style='color: {text_color};'><b>{role}:</b><br/>{content}</p>")
+        if thinking:
+            bubbles.append("<p><b>AI:</b><br/><i>Searching document and generating answer...</i></p>")
+        self.chat_history.setHtml(welcome_html + "".join(bubbles))
+        self.chat_history.moveCursor(QTextCursor.End)
 
     def _apply_prompt_chip(self, prompt):
         self.chat_input.setText(prompt)
@@ -522,65 +555,35 @@ class AISummaryDialog(QDialog):
 
         if self.chat_worker is not None and self.chat_worker.isRunning():
             return
+        if not self._analysis_ready or (self.worker is not None and self.worker.isRunning()):
+            InfoBar.info("Document Loading", "Please wait for document analysis to finish.", parent=self)
+            return
 
         self.chat_input.clear()
         self.chat_input.setEnabled(False)
         self.btn_send.setEnabled(False)
         self.btn_send.setText("Thinking...")
 
-        # Append user message bubble and AI thinking bubble
-        dark = isDarkTheme()
-        user_bg = "rgba(0, 153, 255, 0.2)"
-        ai_bg = "rgba(255, 255, 255, 0.05)" if dark else "rgba(0, 0, 0, 0.04)"
-        text_color = "#ffffff" if dark else "#1f1f1f"
-
-        current_html = self.chat_history.toHtml()
-        new_bubbles = f"""
-        <div style='margin-bottom: 10px; font-family: Segoe UI, sans-serif; color: {text_color};'>
-            <div style='background: {user_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; text-align: left;'>
-                <b style='color: #0099ff;'>You:</b><br/>
-                {query}
-            </div>
-            <div id='ai-thinking' style='background: {ai_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px;'>
-                <b style='color: #2bba68;'>AI:</b><br/>
-                <i>Searching document and generating answer...</i>
-            </div>
-        </div>
-        """
-        self.chat_history.setHtml(current_html + new_bubbles)
-        self.chat_history.moveCursor(QTextCursor.End)
-
         context_text = self.document_text or self.summary_text.toPlainText()
-        self.chat_worker = ChatWorker(context_text, query, parent=self)
+        self.chat_worker = ChatWorker(
+            context_text, query, parent=self, history=self.conversation_history, filepath=self.filepath
+        )
+        self.conversation_history.append({"role": "user", "content": query})
+        self._render_chat_history(thinking=True)
         self.chat_worker.response_ready.connect(lambda reply: self._on_chat_response(reply))
+        self.chat_worker.finished.connect(self._finish_pending_close)
         self.chat_worker.start()
 
     def _on_chat_response(self, reply):
+        if self._pending_close_result is not None:
+            return
         self.chat_input.setEnabled(True)
         self.btn_send.setEnabled(True)
         self.btn_send.setText("Ask AI")
         self.chat_input.setFocus()
 
-        # Replace thinking text with the generated response
-        current_html = self.chat_history.toHtml()
-        formatted_reply = reply.replace("\n", "<br/>")
-        if "<i>Searching document and generating answer...</i>" in current_html:
-            updated_html = current_html.replace(
-                "<i>Searching document and generating answer...</i>",
-                formatted_reply
-            )
-        else:
-            dark = isDarkTheme()
-            ai_bg = "rgba(255, 255, 255, 0.05)" if dark else "rgba(0, 0, 0, 0.04)"
-            text_color = "#ffffff" if dark else "#1f1f1f"
-            updated_html = current_html + f"""
-            <div style='background: {ai_bg}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-family: Segoe UI, sans-serif; color: {text_color};'>
-                <b style='color: #2bba68;'>AI:</b><br/>
-                {formatted_reply}
-            </div>
-            """
-        self.chat_history.setHtml(updated_html)
-        self.chat_history.moveCursor(QTextCursor.End)
+        self.conversation_history.append({"role": "assistant", "content": str(reply)})
+        self._render_chat_history()
 
     def _export_summary(self):
         text = self.summary_text.toPlainText()
@@ -621,22 +624,28 @@ class AISummaryDialog(QDialog):
             norm_path = os.path.normpath(self.filepath)
             subprocess.Popen(f'explorer /select,"{norm_path}"')
 
+    def _workers_running(self):
+        return any(worker is not None and worker.isRunning() for worker in (self.worker, self.chat_worker))
+
+    def done(self, result):
+        # QThread.quit() cannot interrupt blocking requests inside run(). Keep
+        # ownership until workers exit instead of destroying a running thread.
+        if self._workers_running():
+            self._pending_close_result = result
+            self.setEnabled(False)
+            return
+        super().done(result)
+
+    def _finish_pending_close(self):
+        if self._pending_close_result is not None and not self._workers_running():
+            result = self._pending_close_result
+            self._pending_close_result = None
+            self.setEnabled(True)
+            super().done(result)
+
     def closeEvent(self, event):
-        """Cleanly terminate workers and disconnect signals when modal closes."""
-        if self.worker is not None and self.worker.isRunning():
-            try:
-                self.worker.finished_analysis.disconnect()
-            except Exception:
-                pass
-            self.worker.quit()
-            self.worker.wait(100)
-
-        if self.chat_worker is not None and self.chat_worker.isRunning():
-            try:
-                self.chat_worker.response_ready.disconnect()
-            except Exception:
-                pass
-            self.chat_worker.quit()
-            self.chat_worker.wait(100)
-
+        if self._workers_running():
+            event.ignore()
+            self.done(self.Rejected)
+            return
         super().closeEvent(event)

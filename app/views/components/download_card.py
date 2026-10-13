@@ -271,6 +271,9 @@ class DownloadCard(CardWidget):
         self.worker = None
         self.db_timer = QTimer(self)
         self.db_timer.timeout.connect(self.sync_db)
+        self.retry_timer = QTimer(self)
+        self.retry_timer.setSingleShot(True)
+        self.retry_timer.timeout.connect(self.start_download)
 
         self._create_worker()
 
@@ -388,11 +391,21 @@ class DownloadCard(CardWidget):
         self.worker.error.connect(self.on_error)
 
     def start_download(self):
-        if self._started or self.state == "completed":
+        if self.state == "completed" or (self._started and self.state != "error"):
             return
 
+        if self.state == "error":
+            if self.worker is not None and self.worker.isRunning():
+                self.retry_timer.start(100)
+                return
+            self.retry_timer.stop()
+            if self.worker is not None:
+                self.worker.deleteLater()
+            self._create_worker()
+
         self._started = True
-        if self.state in ("queued", "pending", "paused"):
+        self._finished_emitted = False
+        if self.state in ("queued", "pending", "paused", "error"):
             self.state = "downloading"
             self.btnPause.setEnabled(True)
             self.btnPause.setIcon(FIF.PAUSE)
@@ -674,7 +687,13 @@ class DownloadCard(CardWidget):
         menu.exec_(self.mapToGlobal(pos))
 
     def toggle_pause(self):
-        if self.state == "downloading":
+        if self.state == "queued":
+            owner = self.parent()
+            if getattr(self, "batch_queued", False) and hasattr(owner, "request_queued_download"):
+                owner.request_queued_download(self)
+            else:
+                self.start_download()
+        elif self.state == "downloading":
             self.state = "paused"
             self.worker.pause()
             self.speedLabel.setText("Paused")
@@ -698,20 +717,14 @@ class DownloadCard(CardWidget):
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="downloading")
 
         elif self.state == "error":
-            self.state = "downloading"
-            self.btnPause.setIcon(FIF.PAUSE)
-            self.speedLabel.setText("Connecting...")
-            self.etaLabel.setText("ETA: --:--")
-
-            self._create_worker()
-            self.worker.start()
-            self.db_timer.start(5000)
+            self.start_download()
 
             if self.task_id:
                 update_task_progress(self.task_id, self.downloaded_size, self.total_size, status="downloading")
 
     def cancel_download(self):
         self.db_timer.stop()
+        self.retry_timer.stop()
         if self.worker is not None:
             worker = self.worker
             self.worker = None

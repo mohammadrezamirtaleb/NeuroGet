@@ -860,6 +860,16 @@ class DownloadWorker(QThread):
                 # requests.Session is not guaranteed to be thread-safe. Give each
                 # segment an independent connection pool, especially for long transfers.
                 segment_session = self._make_session()
+                if session is not None:
+                    # Retain cookies acquired by the probe (e.g. session-gated
+                    # downloads) without sharing mutable sessions across threads.
+                    segment_session.headers.update(session.headers)
+                    segment_session.cookies.update(session.cookies)
+                    segment_session.auth = session.auth
+                    segment_session.proxies.update(session.proxies)
+                    segment_session.verify = session.verify
+                    segment_session.cert = session.cert
+                    segment_session.trust_env = session.trust_env
                 response = self._open_stream(segment_session, headers)
 
                 if response.status_code == 200:

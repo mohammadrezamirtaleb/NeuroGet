@@ -12,8 +12,8 @@ from app.services.router import SmartRouter
 @pytest.fixture(autouse=True)
 def configured_provider(monkeypatch):
     monkeypatch.setattr(AIClient, "_offline_providers", {})
-    monkeypatch.setattr(AIClient, "get_api_key", lambda: "test-provider-key")
-    monkeypatch.setattr(AIClient, "get_model_name", lambda: "")
+    monkeypatch.setattr(AIClient, "get_api_key", lambda provider=None: "test-provider-key")
+    monkeypatch.setattr(AIClient, "get_model_name", lambda provider=None: "")
 
 
 def json_response(payload):
@@ -41,7 +41,7 @@ def test_claude_uses_messages_api(monkeypatch):
 ])
 def test_opencode_uses_its_own_api_family(monkeypatch, model, path, payload):
     monkeypatch.setattr(AIClient, "get_configured_provider", lambda: "OpenCode Zen")
-    monkeypatch.setattr(AIClient, "get_model_name", lambda: model)
+    monkeypatch.setattr(AIClient, "get_model_name", lambda provider=None: model)
     post = Mock(return_value=json_response(payload))
     monkeypatch.setattr(requests, "post", post)
     assert AIClient.call_llm("hello") == "ok"

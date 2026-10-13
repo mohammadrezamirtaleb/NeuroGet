@@ -108,11 +108,13 @@ graph TD
 * **Cloud LLM Support:** Connects to OpenAI, Google Gemini, Anthropic Claude, OpenRouter, and OpenCode. Configure a model ID in the API key dialog. Claude uses the Messages API; OpenCode selects the Messages, Responses, Gemini, or Chat Completions API for the configured model family. Copilot subscriptions are not supported as API-key providers; saved Copilot selections use heuristic fallbacks without forwarding tokens to other services.
 * **Background AI Routing:** Semantic rules and automatic categories consult the selected provider in the download worker, with heuristic fallbacks when unavailable. Explicit extension and filename rules retain priority according to their rule order.
 * **Verified AI Download Links:** Natural-language results are probed for HTML and error responses before offering a file download. Results that identify a webpage offer to open that page in the browser.
+* **Provider Credentials:** Keys and model IDs are stored separately for each provider. Legacy global keys are not forwarded; configure them again for their intended provider in the API key dialog.
 * **100% Heuristic Fallbacks:** Zero dependency on internet connectivity or external APIs; all categorization and renaming tasks fall back smoothly to rule-based heuristics if no LLM is present.
 
 ### 📄 Content Analyzer & Document Mini-RAG
 * **Instant Summaries:** Extracts key insights, reading times, and structured takeaways from PDFs, code files, text documents, subtitles, and archives.
 * **Interactive Document Q&A:** Ask questions directly to your downloaded document inside a 3-tab Fluent dialog grounded in the file's content.
+* **Document Retrieval & Conversation:** Q&A streams supported text files and every extractable PDF page to find relevant passages, retaining recent conversation turns for follow-up questions. Prompt size stays bounded; scanned PDFs require OCR outside NeuroGet. PDF text extraction uses `pypdf` from `requirements.txt`.
 
 ### 🧹 AI Clean Renaming
 * **Tag & Prefix Stripper:** Automatically strips intrusive website tags, download tracker prefixes (e.g. `[Soft98.ir]`, `(Site.com)`), and messy query strings before saving to disk.
@@ -210,17 +212,12 @@ python main.py
 
 ## 🧪 Running Automated Tests
 
-NeuroGet includes an end-to-end test suite covering all UI components, background workers, AI endpoints, and update mechanics:
+The suite covers the downloader, AI provider request formats, document retrieval, persistent settings, Qt workflows, and update logic. It creates an isolated test database and temporary files; external AI responses are mocked. A loopback HTTP server verifies real segmented transfers and session-cookie handling.
 
 ```powershell
-# Run AI & Smart Features Test Suite
-python tests/test_ai_features.py
-
-# Run Auto-Updater & GitHub API Test Suite
-python tests/test_updater.py
-
-# Run Comprehensive UI & Worker Suite
-python tests/test_ui_comprehensive.py
+python -m pip install -r requirements.txt pytest
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest tests -q
 ```
 
 ---

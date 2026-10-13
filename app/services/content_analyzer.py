@@ -10,6 +10,41 @@ class ContentAnalyzer:
     to feed into the AI Summarizer and Chat (Mini-RAG).
     """
 
+    TEXT_EXTENSIONS = {
+        '.txt', '.md', '.markdown', '.py', '.js', '.ts', '.html', '.css',
+        '.json', '.csv', '.xml', '.yaml', '.yml', '.ini', '.log', '.rst',
+        '.c', '.cpp', '.h', '.java', '.cs', '.go', '.rs', '.sql', '.sh',
+        '.srt', '.vtt', '.sub', '.ass'
+    }
+
+    @classmethod
+    def iter_document_text(cls, filepath):
+        """Stream every text block or PDF page for Q&A, beyond summary limits."""
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in cls.TEXT_EXTENSIONS:
+            with open(filepath, 'rb') as document:
+                prefix = document.read(4)
+            if prefix.startswith((b'\xff\xfe\0\0', b'\0\0\xfe\xff')):
+                encoding = 'utf-32'
+            elif prefix.startswith((b'\xff\xfe', b'\xfe\xff')):
+                encoding = 'utf-16'
+            else:
+                encoding = 'utf-8-sig'
+            with open(filepath, 'r', encoding=encoding, errors='replace') as document:
+                while True:
+                    block = document.read(4096)
+                    if not block:
+                        break
+                    yield block
+        elif ext == '.pdf':
+            import pypdf
+            with open(filepath, 'rb') as document:
+                reader = pypdf.PdfReader(document)
+                for number, page in enumerate(reader.pages, 1):
+                    text = page.extract_text() or ''
+                    if text.strip():
+                        yield f"\n--- Page {number} ---\n{text}\n"
+
     @classmethod
     def analyze_file(cls, filepath):
         if not filepath or not os.path.exists(filepath):

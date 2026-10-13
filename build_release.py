@@ -61,6 +61,8 @@ def build():
         "--hidden-import=app.services.ai_client",
         "--hidden-import=app.services.ai_scanner",
         "--hidden-import=app.services.content_analyzer",
+        "--hidden-import=app.services.document_context",
+        "--hidden-import=pypdf",
         "--hidden-import=app.services.password_finder",
         "--hidden-import=app.services.router",
         "--hidden-import=app.services.threat_detector",

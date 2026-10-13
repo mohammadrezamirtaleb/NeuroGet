@@ -84,6 +84,7 @@ class DownloadsPage(QWidget):
 
         self.batch_queue = []
         self.active_batch_card = None
+        self._batch_paused = False
 
         self.clipboard = QApplication.clipboard()
         self.last_clipboard_text = ""
@@ -414,6 +415,7 @@ class DownloadsPage(QWidget):
         self._apply_card_filters()
 
     def pause_all_downloads(self):
+        self._batch_paused = True
         for i in range(self.scroll_layout.count()):
             w = self.scroll_layout.itemAt(i).widget()
             if isinstance(w, DownloadCard) and getattr(w, 'state', '') == "downloading":
@@ -421,10 +423,14 @@ class DownloadsPage(QWidget):
         self._update_ui_counters()
 
     def resume_all_downloads(self):
+        self._batch_paused = False
         for i in range(self.scroll_layout.count()):
             w = self.scroll_layout.itemAt(i).widget()
             if isinstance(w, DownloadCard) and getattr(w, 'state', '') in ("paused", "error", "queued"):
+                if w in self.batch_queue:
+                    continue
                 w.toggle_pause()
+        self.start_next_batch()
         self._update_ui_counters()
 
     def clear_completed_downloads(self):
@@ -634,7 +640,7 @@ class DownloadsPage(QWidget):
         self.start_next_batch()
 
     def start_next_batch(self):
-        if self.active_batch_card is not None:
+        if self._batch_paused or self.active_batch_card is not None:
             return
 
         while self.batch_queue:
@@ -644,6 +650,14 @@ class DownloadsPage(QWidget):
             return
 
         self.active_batch_card = None
+
+    def request_queued_download(self, card):
+        if card not in self.batch_queue:
+            return
+        self.batch_queue.remove(card)
+        self.batch_queue.insert(0, card)
+        self._batch_paused = False
+        self.start_next_batch()
 
     def on_card_finished(self, card):
         was_batch = getattr(card, "batch_queued", False)
