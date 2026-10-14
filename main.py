@@ -40,6 +40,7 @@ class MainWindow(FluentWindow):
 
         # Create Pages (yield to event loop so splash screen animation continues)
         self.downloads_interface = DownloadsPage(self)
+        self.downloads_page = self.downloads_interface
         QApplication.processEvents()
         
         self.rules_interface = SmartRulesPage(self)

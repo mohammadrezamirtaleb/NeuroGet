@@ -134,7 +134,7 @@ class DownloadsPage(QWidget):
         input_card_layout.addWidget(input_icon)
 
         self.url_input = LineEdit(self.input_card)
-        self.url_input.setPlaceholderText("Paste URL (HTTP/HTTPS/FTP) or ask AI (e.g. 'download python 3.12 installer')...")
+        self.url_input.setPlaceholderText("Paste URL (HTTP/HTTPS) or ask AI (e.g. 'download python 3.12 installer')...")
         self.url_input.setMinimumHeight(44)
         self.url_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.url_input.setClearButtonEnabled(True)
@@ -250,12 +250,14 @@ class DownloadsPage(QWidget):
         empty_layout.addWidget(empty_title, 0, Qt.AlignCenter)
 
         empty_subtitle = CaptionLabel(
-            "Paste any download link above or type a natural language prompt for AI to find and route files automatically.",
+            "Paste any download link above or type a natural language prompt\nfor AI to find and route files automatically.",
             self.empty_card
         )
         empty_subtitle.setWordWrap(True)
         empty_subtitle.setAlignment(Qt.AlignCenter)
-        empty_subtitle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        empty_subtitle.setMinimumWidth(480)
+        empty_subtitle.setMaximumWidth(560)
+        empty_subtitle.setMinimumHeight(44)
         empty_layout.addWidget(empty_subtitle, 0, Qt.AlignCenter)
 
         # Quick Tips / Feature Highlights

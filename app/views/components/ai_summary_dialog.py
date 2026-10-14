@@ -354,9 +354,9 @@ class AISummaryDialog(QDialog):
 
         self.chip1 = PillPushButton("Summarize main points", chat_card)
         self.chip1.clicked.connect(lambda: self._apply_prompt_chip("Summarize the main points of this document."))
-        self.chip2 = PillPushButton("Key takeaways & conclusions", chat_card)
+        self.chip2 = PillPushButton("Key takeaways && conclusions", chat_card)
         self.chip2.clicked.connect(lambda: self._apply_prompt_chip("What are the key takeaways and conclusions?"))
-        self.chip3 = PillPushButton("Extract action items & numbers", chat_card)
+        self.chip3 = PillPushButton("Extract action items && numbers", chat_card)
         self.chip3.clicked.connect(lambda: self._apply_prompt_chip("Extract all action items, dates, and important metrics."))
 
         chips_layout.addWidget(self.chip1)

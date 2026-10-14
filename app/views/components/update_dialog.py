@@ -183,7 +183,7 @@ class UpdateDialog(QDialog):
         self.btn_later = PushButton("Remind Me Later", self)
         self.btn_later.clicked.connect(self.reject)
 
-        self.btn_download = PrimaryPushButton("Download & Install Update", self, FIF.DOWNLOAD)
+        self.btn_download = PrimaryPushButton("Download && Install Update", self, FIF.DOWNLOAD)
         if not self.update_info.get("expected_hash", ""):
             self.btn_download.setText("View Release on GitHub")
         self.btn_download.clicked.connect(self._start_download)
@@ -192,7 +192,7 @@ class UpdateDialog(QDialog):
         self.btn_cancel_dl.clicked.connect(self._cancel_download)
         self.btn_cancel_dl.hide()
 
-        self.btn_install_now = PrimaryPushButton("Install & Restart Now", self, FIF.UPDATE)
+        self.btn_install_now = PrimaryPushButton("Install && Restart Now", self, FIF.UPDATE)
         self.btn_install_now.clicked.connect(self._install_and_restart)
         self.btn_install_now.hide()
 

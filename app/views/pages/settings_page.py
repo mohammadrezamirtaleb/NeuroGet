@@ -180,7 +180,7 @@ class SettingsPage(QWidget):
 
         # 2. Threat & Clickbait Detection Checkbox
         self.threat_check = CheckBox(
-            'Enable Real-time Threat & Clickbait Detection (flags double extensions and suspicious binaries)',
+            'Enable Real-time Threat && Clickbait Detection (flags double extensions and suspicious binaries)',
             self.ai_card
         )
         self.threat_check.stateChanged.connect(

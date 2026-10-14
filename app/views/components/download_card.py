@@ -376,8 +376,33 @@ class DownloadCard(CardWidget):
 
         if not threat["is_safe"]:
             self.threat_level = threat["level"]
-            self.threatBadge.setText("Suspicious" if threat["level"] == "warning" else "High Risk")
+            is_warn = threat["level"] == "warning"
+            self.threatBadge.setText("Suspicious" if is_warn else "High Risk")
             self.threatBadge.setToolTip("\n".join(threat["reasons"]))
+            if is_warn:
+                self.threatBadge.setStyleSheet("""
+                    CaptionLabel {
+                        color: #D83B01;
+                        background-color: rgba(247, 99, 12, 0.15);
+                        border: 1px solid rgba(247, 99, 12, 0.35);
+                        border-radius: 5px;
+                        padding: 2px 8px;
+                        font-weight: 600;
+                        font-size: 11px;
+                    }
+                """)
+            else:
+                self.threatBadge.setStyleSheet("""
+                    CaptionLabel {
+                        color: #E81123;
+                        background-color: rgba(232, 17, 35, 0.15);
+                        border: 1px solid rgba(232, 17, 35, 0.3);
+                        border-radius: 5px;
+                        padding: 2px 8px;
+                        font-weight: 600;
+                        font-size: 11px;
+                    }
+                """)
             self.threatBadge.show()
             if self.task_id:
                 update_task_metadata(self.task_id, threat_level=self.threat_level)
@@ -478,12 +503,13 @@ class DownloadCard(CardWidget):
     def on_progress(self, downloaded, speed, eta):
         self.downloaded_size = downloaded
         if self.total_size > 0:
-            pct = int((downloaded / self.total_size) * 100)
+            pct = min(100, max(0, int((downloaded / self.total_size) * 100)))
             self.progressBar.setValue(pct)
 
         down_str = format_size(downloaded)
         tot_str = format_size(self.total_size) if self.total_size > 0 else "Unknown"
-        pct_str = f" ({int((downloaded/self.total_size)*100)}%)" if self.total_size > 0 else ""
+        pct_val = min(100, max(0, int((downloaded / self.total_size) * 100))) if self.total_size > 0 else 0
+        pct_str = f" ({pct_val}%)" if self.total_size > 0 else ""
         self.sizeLabel.setText(f"{down_str} / {tot_str}{pct_str}")
         self.speedLabel.setText(f"{format_size(speed)}/s")
         self.etaLabel.setText(f"{eta} left")
@@ -631,7 +657,7 @@ class DownloadCard(CardWidget):
             line_edit.setReadOnly(True)
             w.textLayout.addWidget(line_edit)
 
-        w.yesButton.setText('Copy First & Close')
+        w.yesButton.setText('Copy First && Close')
         w.cancelButton.setText('Close')
 
         if w.exec():
@@ -662,8 +688,16 @@ class DownloadCard(CardWidget):
     def copy_url(self):
         if self.url:
             win = self.window()
-            if hasattr(win, 'downloads_page') and hasattr(win.downloads_page, 'last_clipboard_text'):
-                win.downloads_page.last_clipboard_text = self.url
+            dp = getattr(win, 'downloads_interface', getattr(win, 'downloads_page', None))
+            if dp is None:
+                p = self.parent()
+                while p:
+                    if hasattr(p, 'last_clipboard_text'):
+                        dp = p
+                        break
+                    p = p.parent()
+            if dp and hasattr(dp, 'last_clipboard_text'):
+                dp.last_clipboard_text = self.url
             QApplication.clipboard().setText(self.url)
             InfoBar.success('Copied', 'Download link copied to clipboard.', parent=self.window(), duration=2500)
 
@@ -701,7 +735,7 @@ class DownloadCard(CardWidget):
             menu.addAction(act_pwd)
 
         menu.addSeparator()
-        act_delete = Action(FIF.DELETE, "Cancel & Remove Task", triggered=self.cancel_download)
+        act_delete = Action(FIF.DELETE, "Cancel && Remove Task", triggered=self.cancel_download)
         menu.addAction(act_delete)
 
         menu.exec_(self.mapToGlobal(pos))

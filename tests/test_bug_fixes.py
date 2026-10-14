@@ -218,3 +218,56 @@ def test_ai_scanner_gguf_removesuffix():
     if model_id.endswith('.gguf'):
         model_id = model_id[:-5]
     assert model_id == "debug_model"
+
+
+def test_ui_empty_subtitle_layout():
+    """Verify empty state subtitle in DownloadsPage has comfortable width, height, and no clipping."""
+    from app.models.database import init_db
+    init_db()
+    from app.views.pages.downloads_page import DownloadsPage
+
+    page = DownloadsPage()
+    # Find empty_subtitle in empty_card
+    sub = None
+    for child in page.empty_card.children():
+        if hasattr(child, 'text') and 'Paste any download' in child.text():
+            sub = child
+            break
+
+    assert sub is not None, "empty_subtitle should exist"
+    assert sub.wordWrap() is True
+    assert sub.minimumWidth() >= 480
+    assert sub.minimumHeight() >= 40
+    assert "\n" in sub.text(), "Subtitle should have balanced line break"
+    assert "Paste URL (HTTP/HTTPS)" in page.url_input.placeholderText()
+    assert "FTP" not in page.url_input.placeholderText()
+
+
+def test_ui_threat_checkbox_ampersand():
+    """Verify ampersand is escaped in QCheckBox so it does not get swallowed by mnemonic."""
+    from app.models.database import init_db
+    init_db()
+    from app.views.pages.settings_page import SettingsPage
+
+    page = SettingsPage()
+    assert "Threat && Clickbait" in page.threat_check.text()
+
+
+def test_ui_download_card_copy_url_clipboard_tracking():
+    """Verify copy_url updates last_clipboard_text on DownloadsPage to prevent prompt loops."""
+    from app.models.database import init_db
+    init_db()
+    from app.views.pages.downloads_page import DownloadsPage
+    from app.views.components.download_card import DownloadCard
+
+    page = DownloadsPage()
+    card = DownloadCard(
+        "https://example.com/test.zip",
+        "test.zip",
+        "C:/Downloads",
+        auto_start=False,
+        parent=page
+    )
+    card.copy_url()
+    assert page.last_clipboard_text == "https://example.com/test.zip"
+
