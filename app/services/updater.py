@@ -241,12 +241,21 @@ class UpdateCheckWorker(QThread):
         super().__init__(parent)
         self.current_version = current_version
         self.channel = channel
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
 
     def run(self):
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         result = UpdateService.check_for_updates(
             current_version=self.current_version,
             channel=self.channel
         )
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         if result.get("success"):
             self.finished_check.emit(result)
         else:

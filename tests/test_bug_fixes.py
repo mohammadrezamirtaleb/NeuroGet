@@ -270,6 +270,8 @@ def test_ui_download_card_copy_url_clipboard_tracking():
     )
     card.copy_url()
     assert page.last_clipboard_text == "https://example.com/test.zip"
+    from PyQt5.QtWidgets import QApplication
+    QApplication.clipboard().clear()
 
 
 def test_nglock_deleted_on_finalize(tmp_path):

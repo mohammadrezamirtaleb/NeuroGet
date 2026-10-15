@@ -153,17 +153,33 @@ class MainWindow(FluentWindow):
         """Gracefully shut down all background threads without blocking the main UI thread."""
         from app.common.workers import retired_workers
         self._closing = True
+        if hasattr(self, 'hide'):
+            try:
+                self.hide()
+            except Exception:
+                pass
         workers = set(self.findChildren(QThread)) | set(retired_workers)
-        if any(worker.isRunning() for worker in workers):
+        attempts = getattr(self, '_close_attempts', None)
+        if isinstance(attempts, int):
+            self._close_attempts = attempts + 1
+        else:
+            self._close_attempts = 1
+            attempts = 0
+
+        if any(worker.isRunning() for worker in workers) and attempts < 15:
             event.ignore()
             self.setEnabled(False)
             for worker in workers:
                 if hasattr(worker, 'cancel'):
-                    worker.cancel()
+                    try:
+                        worker.cancel()
+                    except Exception:
+                        pass
                 worker.requestInterruption()
                 worker.quit()
             QTimer.singleShot(100, self.close)
             return
+
         # Cancel all active download workers in DownloadsPage
         if hasattr(self, 'downloads_interface'):
             layout = self.downloads_interface.scroll_layout
@@ -185,7 +201,7 @@ class MainWindow(FluentWindow):
                         pass
                     try:
                         widget.worker.cancel()
-                        widget.worker.wait(300)
+                        widget.worker.wait(50)
                     except Exception:
                         pass
                 if widget and hasattr(widget, 'extract_worker') and widget.extract_worker is not None:
@@ -195,7 +211,7 @@ class MainWindow(FluentWindow):
                         pass
                     try:
                         widget.extract_worker.cancel()
-                        widget.extract_worker.wait(200)
+                        widget.extract_worker.wait(50)
                     except Exception:
                         pass
 
@@ -210,8 +226,10 @@ class MainWindow(FluentWindow):
                     except Exception:
                         pass
                     try:
+                        if hasattr(updater, 'cancel'):
+                            updater.cancel()
                         updater.quit()
-                        updater.wait(50)
+                        updater.wait(20)
                     except Exception:
                         pass
 
@@ -224,8 +242,10 @@ class MainWindow(FluentWindow):
                 except Exception:
                     pass
                 try:
+                    if hasattr(scanner, 'cancel'):
+                        scanner.cancel()
                     scanner.quit()
-                    scanner.wait(50)
+                    scanner.wait(20)
                 except Exception:
                     pass
 

@@ -152,8 +152,10 @@ def test_full_ui_suite():
 
     if hasattr(window.rules_interface, 'scanner_thread') and window.rules_interface.scanner_thread:
         try:
+            if hasattr(window.rules_interface.scanner_thread, 'cancel'):
+                window.rules_interface.scanner_thread.cancel()
             window.rules_interface.scanner_thread.quit()
-            window.rules_interface.scanner_thread.wait(500)
+            window.rules_interface.scanner_thread.wait(1500)
         except Exception:
             pass
 

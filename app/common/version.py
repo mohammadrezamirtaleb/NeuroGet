@@ -4,7 +4,7 @@ NeuroGet Version and Repository Configuration
 import os
 
 APP_NAME = "NeuroGet"
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 GITHUB_OWNER = "mohammadrezamirtaleb"
 GITHUB_REPO = "NeuroGet"

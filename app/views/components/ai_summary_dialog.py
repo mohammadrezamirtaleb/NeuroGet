@@ -26,14 +26,22 @@ class SummaryWorker(QThread):
     def __init__(self, filepath, parent=None):
         super().__init__(parent)
         self.filepath = filepath
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
 
     def run(self):
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         try:
             result = ContentAnalyzer.analyze_file(self.filepath)
         except Exception:
             result = {"summary": "The file could not be analyzed. Check that it exists and is readable.",
                       "metadata": {}, "raw_text": "", "is_ai": False}
-        self.finished_analysis.emit(result)
+        if not (self._is_cancelled or self.isInterruptionRequested()):
+            self.finished_analysis.emit(result)
 
 
 class ChatWorker(QThread):
@@ -45,15 +53,23 @@ class ChatWorker(QThread):
         self.query = query
         self.history = normalize_history(history)
         self.filepath = filepath
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
 
     def run(self):
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         try:
             reply = AIClient.chat_with_document(
                 self.document_text, self.query, history=self.history, filepath=self.filepath
             )
         except Exception:
             reply = "The document assistant could not complete this request. Please try again."
-        self.response_ready.emit(reply)
+        if not (self._is_cancelled or self.isInterruptionRequested()):
+            self.response_ready.emit(reply)
 
 
 class AISummaryDialog(QDialog):

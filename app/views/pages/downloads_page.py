@@ -52,10 +52,18 @@ class NLPromptWorker(QThread):
     def __init__(self, prompt, parent=None):
         super().__init__(parent)
         self.prompt = prompt
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
 
     def run(self):
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         res = AIClient.resolve_natural_language_download(self.prompt)
-        self.resolved.emit(res or {})
+        if not (self._is_cancelled or self.isInterruptionRequested()):
+            self.resolved.emit(res or {})
 
 
 class DownloadsPage(QWidget):

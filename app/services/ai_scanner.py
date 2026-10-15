@@ -5,8 +5,11 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 class LocalAIDetector:
     @staticmethod
-    def detect_providers():
+    def detect_providers(check_cancelled=None):
         providers = []
+
+        if check_cancelled and check_cancelled():
+            return providers
 
         # --- 1. Detect Ollama ---
         ollama_models = []
@@ -14,7 +17,7 @@ class LocalAIDetector:
 
         # 1a. Try Ollama HTTP API
         try:
-            r = requests.get("http://localhost:11434/api/tags", timeout=2.5)
+            r = requests.get("http://localhost:11434/api/tags", timeout=1.0)
             if r.status_code == 200:
                 raw_models = r.json().get("models", [])
                 for m in raw_models:
@@ -25,6 +28,9 @@ class LocalAIDetector:
         except Exception:
             pass
 
+        if check_cancelled and check_cancelled():
+            return providers
+
         # 1b. Scan Local Disk Manifests for Installed Models
         disk_models = LocalAIDetector._scan_ollama_disk_manifests()
         for dm in disk_models:
@@ -32,7 +38,7 @@ class LocalAIDetector:
                 ollama_models.append(dm)
 
         # 1c. Try CLI if models still not discovered
-        if not ollama_models:
+        if not ollama_models and not (check_cancelled and check_cancelled()):
             cli_models = LocalAIDetector._scan_ollama_cli()
             for cm in cli_models:
                 if cm not in ollama_models:
@@ -46,12 +52,15 @@ class LocalAIDetector:
                 "models": ollama_models
             })
 
+        if check_cancelled and check_cancelled():
+            return providers
+
         # --- 2. Detect LM Studio ---
         lm_models = []
         lm_online = False
 
         try:
-            r = requests.get("http://localhost:1234/v1/models", timeout=2.0)
+            r = requests.get("http://localhost:1234/v1/models", timeout=1.0)
             if r.status_code == 200:
                 raw_models = r.json().get("data", [])
                 for m in raw_models:
@@ -61,6 +70,9 @@ class LocalAIDetector:
                 lm_online = True
         except Exception:
             pass
+
+        if check_cancelled and check_cancelled():
+            return providers
 
         lm_disk_models = LocalAIDetector._scan_lm_studio_disk()
         for dm in lm_disk_models:
@@ -78,12 +90,15 @@ class LocalAIDetector:
                 "models": lm_models if lm_models else ["Local Server Model"]
             })
 
+        if check_cancelled and check_cancelled():
+            return providers
+
         # --- 3. Detect GPT4All ---
         gpt_models = []
         gpt_online = False
 
         try:
-            r = requests.get("http://localhost:4891/v1/models", timeout=2.0)
+            r = requests.get("http://localhost:4891/v1/models", timeout=1.0)
             if r.status_code == 200:
                 raw_models = r.json().get("data", [])
                 for m in raw_models:
@@ -93,6 +108,9 @@ class LocalAIDetector:
                 gpt_online = True
         except Exception:
             pass
+
+        if check_cancelled and check_cancelled():
+            return providers
 
         gpt_path1 = os.path.expandvars(r"%LOCALAPPDATA%\nomic.ai\GPT4All\chat.exe")
         gpt_path2 = os.path.expandvars(r"%LOCALAPPDATA%\nomic.ai\GPT4All\bin\chat.exe")
@@ -184,6 +202,22 @@ class LocalAIDetector:
 class ScannerWorker(QThread):
     finished_scan = pyqtSignal(list)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
+
     def run(self):
-        providers = LocalAIDetector.detect_providers()
-        self.finished_scan.emit(providers)
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
+        try:
+            providers = LocalAIDetector.detect_providers(
+                check_cancelled=lambda: self._is_cancelled or self.isInterruptionRequested()
+            )
+        except TypeError:
+            providers = LocalAIDetector.detect_providers()
+        if not (self._is_cancelled or self.isInterruptionRequested()):
+            self.finished_scan.emit(providers)

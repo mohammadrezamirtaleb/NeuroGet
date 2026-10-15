@@ -29,18 +29,28 @@ class TestRouteWorker(QThread):
     def __init__(self, test_input, parent=None):
         super().__init__(parent)
         self.test_input = test_input
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+        self.requestInterruption()
 
     def run(self):
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         filename = os.path.basename(self.test_input) if "/" in self.test_input or "\\" in self.test_input else self.test_input
         url = self.test_input if self.test_input.startswith("http") else ""
         category = AIClient.classify_category(filename, url)
+        if self._is_cancelled or self.isInterruptionRequested():
+            return
         dest_dir, matched_rule = SmartRouter.route_download(url, filename)
-        self.finished_test.emit({
-            "filename": filename,
-            "category": category,
-            "dest_dir": dest_dir,
-            "matched_rule": matched_rule
-        })
+        if not (self._is_cancelled or self.isInterruptionRequested()):
+            self.finished_test.emit({
+                "filename": filename,
+                "category": category,
+                "dest_dir": dest_dir,
+                "matched_rule": matched_rule
+            })
 
 
 class AddRuleDialog(QDialog):

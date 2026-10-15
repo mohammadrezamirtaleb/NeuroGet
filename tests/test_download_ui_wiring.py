@@ -40,6 +40,7 @@ def test_routing_runs_in_worker_and_updates_card(monkeypatch, tmp_path):
     monkeypatch.setattr(downloader_module, "get_setting", lambda _key, default=None: default)
     monkeypatch.setattr(router_module, "get_setting", lambda _key, default=None: default)
     monkeypatch.setattr(router_module, "get_all_rules", lambda: [])
+    monkeypatch.setattr(DownloadsPage, "prompt_download_confirmation", lambda *a, **k: None)
     threads = []
 
     def classify(*_args):
