@@ -25,8 +25,14 @@ from app.views.splash_screen import NeuroSplashScreen
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
+        candidate = os.path.join(sys._MEIPASS, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+    exe_candidate = os.path.join(os.path.dirname(sys.executable), relative_path)
+    if os.path.exists(exe_candidate):
+        return exe_candidate
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
 
 class MainWindow(FluentWindow):
     def __init__(self):

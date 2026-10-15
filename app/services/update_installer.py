@@ -12,6 +12,19 @@ class UpdateInstaller:
     """Manages update integrity verification, installer launching, and file backups."""
 
     @staticmethod
+    def _safe_replace(src, dst, max_retries=6, delay=0.08):
+        """Atomically replace src with dst, retrying briefly for transient file locks."""
+        import time
+        for i in range(max_retries):
+            try:
+                os.replace(src, dst)
+                return
+            except (PermissionError, OSError):
+                if i == max_retries - 1:
+                    raise
+                time.sleep(delay)
+
+    @staticmethod
     def install_payload(payload_path, install_dir, before_replace=None):
         """Extract completely before swapping directories; restore on swap failure."""
         install_dir = os.path.abspath(install_dir)
@@ -31,16 +44,17 @@ class UpdateInstaller:
             if before_replace:
                 before_replace()
             if os.path.exists(install_dir):
-                os.replace(install_dir, backup)
+                UpdateInstaller._safe_replace(install_dir, backup)
             try:
-                os.replace(stage, install_dir)
+                UpdateInstaller._safe_replace(stage, install_dir)
             except Exception:
                 if os.path.exists(backup):
-                    os.replace(backup, install_dir)
+                    UpdateInstaller._safe_replace(backup, install_dir)
                 raise
             shutil.rmtree(backup, ignore_errors=True)
         finally:
             shutil.rmtree(stage, ignore_errors=True)
+
 
     @staticmethod
     def ensure_directories():
