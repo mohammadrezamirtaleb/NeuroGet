@@ -23,6 +23,17 @@ MIN_SEGMENT_SIZE = 2 * 1024 * 1024
 MIN_MULTITHREAD_SIZE = 8 * 1024 * 1024
 CHUNK_SIZE = 64 * 1024
 
+
+def _hide_file_on_windows(path):
+    """Set the Windows hidden attribute so auxiliary files are not visible in File Explorer."""
+    if os.name == "nt" and path and os.path.exists(path):
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetFileAttributesW(os.path.abspath(path), 0x02)  # FILE_ATTRIBUTE_HIDDEN
+        except Exception:
+            pass
+
+
 _RUNNING_WORKERS = set()
 
 
@@ -121,6 +132,7 @@ class DownloadWorker(QThread):
                         os.remove(path)
                     except Exception:
                         pass
+            _hide_file_on_windows(self.part_path + ".nglock")
         finally:
             if temporary_lock is not None:
                 temporary_lock.close()
@@ -280,6 +292,15 @@ class DownloadWorker(QThread):
             part_path = candidate + ".part"
             meta_path = part_path + ".ngmeta"
 
+            # If the candidate was already completed in the past, an orphaned .nglock might linger
+            if os.path.exists(candidate) and not os.path.exists(part_path):
+                old_lock = part_path + ".nglock"
+                if os.path.exists(old_lock):
+                    try:
+                        os.remove(old_lock)
+                    except Exception:
+                        pass
+
             path_lock = self._try_lock_path(part_path)
             if path_lock is None:
                 index += 1
@@ -311,12 +332,18 @@ class DownloadWorker(QThread):
                     path_lock.close()
                     raise
             path_lock.close()
+            if not os.path.exists(part_path):
+                try:
+                    os.remove(part_path + ".nglock")
+                except Exception:
+                    pass
             index += 1
 
     @staticmethod
     def _try_lock_path(part_path):
         """OS locks exclude other workers/processes and expire on process exit."""
-        handle = open(part_path + ".nglock", "a+b")
+        lock_file = part_path + ".nglock"
+        handle = open(lock_file, "a+b")
         try:
             if os.name == "nt":
                 import msvcrt
@@ -326,6 +353,7 @@ class DownloadWorker(QThread):
                     handle.flush()
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                _hide_file_on_windows(lock_file)
             else:
                 import fcntl
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -413,6 +441,15 @@ class DownloadWorker(QThread):
         if os.path.exists(self._meta_path):
             try:
                 os.remove(self._meta_path)
+            except Exception:
+                pass
+
+        # Clean up the .nglock file so it is NEVER left visible in the destination folder
+        lock_file = (self.part_path + ".nglock") if self.part_path else None
+        self._release_path_lock()
+        if lock_file and os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
             except Exception:
                 pass
 

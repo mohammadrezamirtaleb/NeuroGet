@@ -367,6 +367,18 @@ class DownloadsPage(QWidget):
                 if status in ("pending", "downloading"):
                     status = "paused"
 
+                # Clean up any orphaned .nglock files left over from previously completed tasks
+                if orig_status == "completed" and task.save_path and task.filename:
+                    for orphan in (
+                        os.path.join(task.save_path, f"{task.filename}.part.nglock"),
+                        os.path.join(task.save_path, f"{task.filename}.nglock"),
+                    ):
+                        if os.path.exists(orphan):
+                            try:
+                                os.remove(orphan)
+                            except Exception:
+                                pass
+
                 card = DownloadCard(
                     task.url,
                     task.filename,

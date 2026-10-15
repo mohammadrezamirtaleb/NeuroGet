@@ -271,3 +271,48 @@ def test_ui_download_card_copy_url_clipboard_tracking():
     card.copy_url()
     assert page.last_clipboard_text == "https://example.com/test.zip"
 
+
+def test_nglock_deleted_on_finalize(tmp_path):
+    """Verify that when a download finishes, .nglock is deleted so user sees only the downloaded file."""
+    worker = DownloadWorker(1, "https://example.com/song.mp3", str(tmp_path))
+    worker.filename = "song.mp3"
+    worker.file_path = str(tmp_path / "song.mp3")
+    worker.part_path = worker.file_path + ".part"
+    worker._meta_path = worker.part_path + ".ngmeta"
+    lock_path = worker.part_path + ".nglock"
+
+    # Simulate in-progress state with locked .nglock, .ngmeta, and .part
+    Path(worker.part_path).write_bytes(b"audio data")
+    Path(worker._meta_path).write_text("{}", encoding="utf-8")
+    worker._path_lock = worker._try_lock_path(worker.part_path)
+    assert Path(lock_path).exists()
+
+    # Finalize download
+    worker._finalize()
+
+    # User must see only the downloaded file; .nglock and .part must NOT exist
+    assert Path(worker.file_path).exists()
+    assert not Path(worker.part_path).exists()
+    assert not Path(worker._meta_path).exists()
+    assert not Path(lock_path).exists(), ".nglock must be deleted on completion"
+
+
+def test_nglock_hidden_on_windows(tmp_path):
+    """Verify that .nglock file is created with Windows hidden attribute."""
+    part_path = str(tmp_path / "test.mp3.part")
+    lock = DownloadWorker._try_lock_path(part_path)
+    assert lock is not None
+    try:
+        lock_file = part_path + ".nglock"
+        assert os.path.exists(lock_file)
+        if os.name == "nt":
+            import ctypes
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(os.path.abspath(lock_file))
+            assert attrs != -1
+            assert bool(attrs & 0x02), ".nglock must have FILE_ATTRIBUTE_HIDDEN on Windows"
+    finally:
+        lock.close()
+        if os.path.exists(part_path + ".nglock"):
+            os.remove(part_path + ".nglock")
+
+

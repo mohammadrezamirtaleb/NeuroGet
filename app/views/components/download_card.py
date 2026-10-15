@@ -543,6 +543,15 @@ class DownloadCard(CardWidget):
             except Exception:
                 pass
 
+        # Ensure no lingering .part.nglock or .nglock remains in the user's folder
+        if filepath:
+            for lock_candidate in (f"{filepath}.part.nglock", f"{filepath}.nglock"):
+                if os.path.exists(lock_candidate):
+                    try:
+                        os.remove(lock_candidate)
+                    except Exception:
+                        pass
+
         self.btnPause.hide()
         self.btnCancel.hide()
         self.btnSummary.show()
