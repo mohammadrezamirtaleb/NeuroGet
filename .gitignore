@@ -12,4 +12,5 @@ payload.zip
 .agents/
 pylint_errors.txt
 LocalLow/
+.pytest*
 
